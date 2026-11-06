@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TrackFix</string>
+    <string name="subtitle">GPS, объединение треков и фото тренировки</string>
+
+    <string name="mode_fix">Fix</string>
+    <string name="mode_merge">Сложить</string>
+    <string name="mode_photo">Фото</string>
+
+    <string name="step_original">Исходный трек</string>
+    <string name="step_original_hint">GPX или FIT с пульсом, каденсом, мощностью и другими данными</string>
+    <string name="step_reference">Эталонный маршрут</string>
+    <string name="step_reference_hint">Правильный GPX- или FIT-трек этой же трассы</string>
+
+    <string name="file_not_selected">Файл не выбран</string>
+    <string name="loading_file">Чтение файла…</string>
+    <string name="choose_gpx">Выбрать GPX или FIT</string>
+    <string name="change_gpx">Заменить файл</string>
+
+    <string name="settings_title">Настройки исправления</string>
+    <string name="deviation_title">Допустимое отклонение от эталона</string>
+    <string name="deviation_value">%1$d м</string>
+    <string name="deviation_hint">Точки, которые отклонились от эталона сильнее, считаются проблемными. Меньше значение — строже исправление.</string>
+    <string name="fill_elevation">Заполнять отсутствующую высоту из эталона</string>
+    <string name="fix_button">Исправить маршрут</string>
+    <string name="processing">Обработка…</string>
+    <string name="result_title">Готово</string>
+    <string name="save_gpx">Сохранить GPX</string>
+    <string name="process_another">Выбрать другой исходный файл</string>
+    <string name="process_another_merge">Выбрать другие файлы</string>
+
+    <string name="error_read">Не удалось прочитать GPX- или FIT-файл</string>
+    <string name="error_invalid_gpx">Файл не похож на корректный GPX или FIT</string>
+    <string name="error_no_points">В треке не найдено точек</string>
+    <string name="error_reference_points">В эталонном треке меньше двух корректных точек</string>
+    <string name="error_select_both">Выберите исходный и эталонный трек</string>
+    <string name="error_too_large">Файл слишком большой для обработки на телефоне</string>
+    <string name="error_save">Не удалось сохранить файл</string>
+    <string name="saved">Файл сохранён</string>
+    <string name="saving">Сохранение…</string>
+    <string name="file_too_large_hint">Файл больше 30 МБ. Выберите GPX или FIT меньшего размера.</string>
+
+    <string name="merge_title">Объединение треков</string>
+    <string name="merge_hint">Добавьте два или больше трека GPX или FIT. Приложение само определит порядок по времени начала.</string>
+    <string name="merge_empty">Файлы не добавлены</string>
+    <string name="add_files">Добавить файлы</string>
+    <string name="clear_list">Очистить список</string>
+    <string name="merge_button">Объединить треки</string>
+    <string name="merge_count">Файлов: %1$d · Точек: %2$d</string>
+    <string name="merge_file_info">%1$s · %2$s · %3$s</string>
+    <string name="remove_file">Удалить файл из списка</string>
+    <string name="loading_files">Чтение файлов…</string>
+
+    <string name="merge_summary_sources">Объединено файлов: %1$d из %2$d</string>
+    <string name="merge_summary_points">Точек в результате: %1$d</string>
+    <string name="merge_summary_segments">Сегментов в результате: %1$d</string>
+    <string name="merge_summary_trimmed">Удалено пересекающихся точек: %1$d</string>
+    <string name="merge_summary_period">Период: %1$s — %2$s</string>
+    <string name="merge_summary_distance">Дистанция: %1$s</string>
+    <string name="merge_warning_skipped">Полностью перекрыты по времени и пропущены: %1$s.</string>
+    <string name="merge_warning_single">После обрезки пересечений остался только один файл. Проверьте порядок и время треков.</string>
+
+    <string name="error_merge_no_time">В файле «%1$s» нет отметок времени. Удалите его из списка.</string>
+    <string name="error_merge_no_coordinates">В файле «%1$s» нет GPS-координат.</string>
+    <string name="error_merge_need_two">Добавьте минимум два файла.</string>
+    <string name="error_merge_empty">После обрезки пересечений не осталось точек.</string>
+
+    <string name="summary_leading">Восстановлено в начале трека: %1$d</string>
+    <string name="summary_trailing">Восстановлено в конце трека: %1$d</string>
+
+    <string name="photo_track_title">Трек тренировки</string>
+    <string name="photo_track_hint">GPX или FIT с данными тренировки</string>
+    <string name="photo_pick_title">Фотография</string>
+    <string name="photo_pick_hint">Фото, на котором появятся выбранные данные</string>
+    <string name="photo_metrics_title">Данные на фото</string>
+    <string name="photo_metrics_hint">Можно выбрать несколько показателей</string>
+    <string name="photo_choose_photo">Выбрать фотографию</string>
+    <string name="photo_change_photo">Заменить фотографию</string>
+    <string name="photo_loading">Чтение фотографии…</string>
+    <string name="photo_rendering">Создание изображения…</string>
+    <string name="photo_preview_placeholder">Здесь появится предпросмотр</string>
+    <string name="photo_preview_desc">Предпросмотр фотографии с данными тренировки</string>
+    <string name="photo_share">Поделиться</string>
+    <string name="photo_save">Сохранить</string>
+    <string name="photo_share_chooser">Поделиться изображением</string>
+    <string name="photo_saved">Изображение сохранено</string>
+    <string name="photo_save_error">Не удалось сохранить изображение</string>
+    <string name="photo_render_error">Не удалось создать изображение</string>
+    <string name="photo_share_error">Не удалось открыть список приложений</string>
+    <string name="photo_load_error">Не удалось прочитать фотографию</string>
+    <string name="photo_track_load_error">Не удалось прочитать трек тренировки</string>
+    <string name="photo_no_metrics">Выберите хотя бы один показатель</string>
+    <string name="photo_no_photo">Сначала выберите фотографию</string>
+    <string name="photo_no_track">Сначала выберите трек тренировки</string>
+    <string name="photo_metrics_note">Серые пункты недоступны: в этом треке нет соответствующих данных.</string>
+    <string name="photo_track_info">Точек: %1$d · %2$s · %3$s</string>
+    <string name="photo_track_info_no_time">Точек: %1$d · %2$s</string>
+    <string name="photo_overlay_title">ТРЕНИРОВКА</string>
+    <string name="photo_activity_title">Тип тренировки</string>
+    <string name="photo_activity_hint">Маленький значок или подпись после слова «ТРЕНИРОВКА»</string>
+    <string name="photo_activity_run">Бег</string>
+    <string name="photo_activity_bike">Вело</string>
+    <string name="photo_activity_custom">Своё</string>
+    <string name="photo_activity_custom_hint">Свой текст</string>
+    <string name="photo_metric_moving_time">Время (без пауз)</string>
+    <string name="photo_metric_distance">Дистанция</string>
+    <string name="photo_metric_average_pace">Средний темп (мин/км)</string>
+    <string name="photo_metric_average_speed">Средняя скорость (км/ч)</string>
+    <string name="photo_metric_average_heart_rate">Средний пульс (уд/мин)</string>
+    <string name="photo_metric_average_power">Средняя мощность (Вт)</string>
+    <string name="photo_metric_total_ascent">Общий подъём (м)</string>
+    <string name="photo_metric_moving_time_short">ВРЕМЯ</string>
+    <string name="photo_metric_distance_short">ДИСТАНЦИЯ</string>
+    <string name="photo_metric_average_pace_short">СРЕДНИЙ ТЕМП</string>
+    <string name="photo_metric_average_speed_short">СРЕДНЯЯ СКОРОСТЬ</string>
+    <string name="photo_metric_average_heart_rate_short">СРЕДНИЙ ПУЛЬС</string>
+    <string name="photo_metric_average_power_short">СРЕДНЯЯ МОЩНОСТЬ</string>
+    <string name="photo_metric_total_ascent_short">ОБЩИЙ ПОДЪЁМ</string>
+    <string name="photo_file_name">trackfix_%1$s.png</string>
+    <string name="photo_share_text">Моя тренировка в TrackFix</string>
+
+    <string name="about_button">О программе</string>
+    <string name="support_button">Поддержать</string>
+    <string name="about_title">О программе</string>
+    <string name="about_version">TrackFix 1.4.0</string>
+    <string name="about_developer">Разработчик: Лявин Роман</string>
+    <string name="about_ai">При разработке использована ИИ-модель OpenCode.</string>
+    <string name="about_email">Почта: lyrv@t-inform.ru</string>
+    <string name="support_title">Поддержать проект</string>
+    <string name="support_body">Спасибо за поддержку TrackFix!</string>
+    <string name="support_hint">Нажмите на картинку, чтобы перейти к оплате.</string>
+    <string name="support_image_desc">Картинка для поддержки проекта</string>
+    <string name="close">Закрыть</string>
+    <string name="error_open_link">Не удалось открыть ссылку.</string>
+
+    <string name="privacy_note">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылке поддержки.</string>
+    <string name="version_note">TrackFix 1.4.0 · GPX, FIT и фото</string>
+
+    <plurals name="points_count">
+        <item quantity="one">%1$d точка</item>
+        <item quantity="few">%1$d точки</item>
+        <item quantity="many">%1$d точек</item>
+        <item quantity="other">%1$d точек</item>
+    </plurals>
+    <string name="info_distance">%1$s · %2$s</string>
+    <string name="info_file">%1$s\n%2$s</string>
+
+    <string name="summary_title">Результат</string>
+    <string name="summary_points">Точек в треке: %1$d</string>
+    <string name="summary_fixed">Исправлено координат: %1$d</string>
+    <string name="summary_frozen">Восстановлено после зависания GPS: %1$d точек (участков: %2$d)</string>
+    <string name="summary_missing">Заполнено пропущенных координат: %1$d</string>
+    <string name="summary_elevation">Заполнено высот: %1$d</string>
+    <string name="summary_runs">Проблемных участков: %1$d</string>
+    <string name="summary_distance">Дистанция: %1$s → %2$s</string>
+    <string name="summary_maxdev">Максимальное отклонение до: %1$s</string>
+    <string name="summary_maxdev_capped">Максимальное отклонение до: больше %1$s</string>
+    <string name="summary_clean">Проблемных координат не найдено. Трек оставлен без изменений.</string>
+    <string name="summary_unresolved">Не удалось исправить точек: %1$d</string>
+    <string name="summary_warnings">Предупреждения:\n%1$s</string>
+    <string name="error_generic">Ошибка: %1$s</string>
+
+    <string name="file_name_suffix">_fixed</string>
+    <string name="save_dialog_title">Сохранить исправленный GPX</string>
+
+    <string name="content_desc_app_icon">Иконка TrackFix</string>
+    <string name="content_desc_status">Статус обработки</string>
+
+    <string name="warning_large_changes">Исправлено больше половины точек. Проверьте, что эталон действительно соответствует этой тренировке.</string>
+    <string name="warning_no_reference_coverage">Часть проблемных точек не удалось исправить: эталон не покрывает этот участок.</string>
+    <string name="warning_reference_segments">В эталонном файле несколько несвязанных сегментов. Корректность стыков проверена приблизительно.</string>
+</resources>

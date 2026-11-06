@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="0dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/about_version"
+        android:textAppearance="@style/TextAppearance.TrackFix.CardTitle"
+        android:textColor="@color/brand" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="@string/about_developer"
+        android:textAppearance="@style/TextAppearance.TrackFix.Body"
+        android:textColor="@color/text_primary" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="@string/about_ai"
+        android:textAppearance="@style/TextAppearance.TrackFix.Body" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:autoLink="email"
+        android:linksClickable="true"
+        android:text="@string/about_email"
+        android:textAppearance="@style/TextAppearance.TrackFix.Body"
+        android:textColor="@color/brand" />
+</LinearLayout>

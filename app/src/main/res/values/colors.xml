@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#0B6E4F</color>
+    <color name="brand_dark">#07543C</color>
+    <color name="brand_light">#DFF3EA</color>
+    <color name="accent">#E8A317</color>
+    <color name="background">#F4F7F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#EDF3F0</color>
+    <color name="text_primary">#18211D</color>
+    <color name="text_secondary">#5B6963</color>
+    <color name="text_tertiary">#7E8B85</color>
+    <color name="card_stroke">#DCE5E0</color>
+    <color name="success">#127A55</color>
+    <color name="warning">#9A6700</color>
+    <color name="warning_bg">#FFF4D6</color>
+    <color name="error">#B3261E</color>
+    <color name="white">#FFFFFF</color>
+    <color name="ic_launcher_background">#0B6E4F</color>
+</resources>
