@@ -8,7 +8,7 @@
     <string name="mode_photo">Фото</string>
 
     <string name="step_original">Исходный трек</string>
-    <string name="step_original_hint">GPX или FIT с пульсом, каденсом, мощностью и другими данными</string>
+    <string name="step_original_hint">GPX или FIT с пульсом, каденсом, мощностью и другими данными. Если GPS не было совсем, маршрут восстановится по эталону</string>
     <string name="step_reference">Эталонный маршрут</string>
     <string name="step_reference_hint">Правильный GPX- или FIT-трек этой же трассы</string>
 
@@ -122,7 +122,7 @@
     <string name="about_button">О программе</string>
     <string name="support_button">Поддержать</string>
     <string name="about_title">О программе</string>
-    <string name="about_version">TrackFix 1.4.0</string>
+    <string name="about_version">TrackFix 1.5.0</string>
     <string name="about_developer">Разработчик: Лявин Роман</string>
     <string name="about_ai">При разработке использована ИИ-модель OpenCode.</string>
     <string name="about_email">Почта: lyrv@t-inform.ru</string>
@@ -134,7 +134,7 @@
     <string name="error_open_link">Не удалось открыть ссылку.</string>
 
     <string name="privacy_note">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылке поддержки.</string>
-    <string name="version_note">TrackFix 1.4.0 · GPX, FIT и фото</string>
+    <string name="version_note">TrackFix 1.5.0 · GPX, FIT, трек без GPS и фото</string>
 
     <plurals name="points_count">
         <item quantity="one">%1$d точка</item>
@@ -147,6 +147,7 @@
 
     <string name="summary_title">Результат</string>
     <string name="summary_points">Точек в треке: %1$d</string>
+    <string name="summary_reconstructed">Восстановлено по эталону точек: %1$d</string>
     <string name="summary_fixed">Исправлено координат: %1$d</string>
     <string name="summary_frozen">Восстановлено после зависания GPS: %1$d точек (участков: %2$d)</string>
     <string name="summary_missing">Заполнено пропущенных координат: %1$d</string>
@@ -169,4 +170,6 @@
     <string name="warning_large_changes">Исправлено больше половины точек. Проверьте, что эталон действительно соответствует этой тренировке.</string>
     <string name="warning_no_reference_coverage">Часть проблемных точек не удалось исправить: эталон не покрывает этот участок.</string>
     <string name="warning_reference_segments">В эталонном файле несколько несвязанных сегментов. Корректность стыков проверена приблизительно.</string>
+    <string name="warning_no_gps_reconstructed">В исходном файле не было GPS-координат. Маршрут восстановлен по эталону: дистанция распределена по времени движения без пауз. Проверьте результат.</string>
+    <string name="error_no_moving_intervals">В треке нет времени движения: все точки отмечены как пауза. Проверьте темп и каденс в исходном файле.</string>
 </resources>

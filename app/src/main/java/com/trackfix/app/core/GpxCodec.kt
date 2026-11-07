@@ -32,7 +32,8 @@ data class GpxPoint(
     val speedMetersPerSecond: Double?,
     val cumulativeDistanceMeters: Double?,
     val element: Element,
-    val segmentIndex: Int
+    val segmentIndex: Int,
+    val cadence: Int? = null
 ) {
     fun toTrackPoint(): TrackPoint = TrackPoint(
         lat = lat,
@@ -40,7 +41,8 @@ data class GpxPoint(
         ele = ele,
         time = time,
         speedMetersPerSecond = speedMetersPerSecond,
-        cumulativeDistanceMeters = cumulativeDistanceMeters
+        cumulativeDistanceMeters = cumulativeDistanceMeters,
+        cadence = cadence
     )
 }
 
@@ -92,7 +94,8 @@ object GpxCodec {
                 speedMetersPerSecond = descendantDouble(element, "speed"),
                 cumulativeDistanceMeters = descendantDouble(element, "distance"),
                 element = element,
-                segmentIndex = pair.second
+                segmentIndex = pair.second,
+                cadence = descendantInt(element, "cad")
             )
         }
 
@@ -149,6 +152,32 @@ object GpxCodec {
             if (result.elevationFilled[i]) {
                 val ele = result.ele[i] ?: continue
                 setOrCreateElevation(document, point.element, file.namespaceUri, ele)
+            }
+        }
+    }
+
+    /**
+     * Removes the per-point cumulative "distance" extension. It becomes stale
+     * when coordinates are rebuilt from a reference track, and some services
+     * (Strava in particular) trust it instead of the real geometry.
+     */
+    fun removeDistanceExtensions(file: GpxFile) {
+        for (point in file.points) {
+            val nodes = ArrayList<Element>()
+            val namespaced = point.element.getElementsByTagNameNS("*", "distance")
+            for (index in 0 until namespaced.length) {
+                (namespaced.item(index) as? Element)?.let { nodes.add(it) }
+            }
+            val plain = point.element.getElementsByTagName("distance")
+            for (index in 0 until plain.length) {
+                (plain.item(index) as? Element)?.let { if (it !in nodes) nodes.add(it) }
+            }
+            for (node in nodes) {
+                val parent = node.parentNode ?: continue
+                parent.removeChild(node)
+                if (localName(parent) == "extensions" && !hasElementChildren(parent)) {
+                    parent.parentNode?.removeChild(parent)
+                }
             }
         }
     }
@@ -286,6 +315,18 @@ object GpxCodec {
             return parseDoubleOrNull(plain.item(0).textContent)
         }
         return null
+    }
+
+    private fun descendantInt(element: Element, name: String): Int? {
+        return descendantDouble(element, name)?.toInt()
+    }
+
+    private fun hasElementChildren(parent: Node): Boolean {
+        val children = parent.childNodes
+        for (index in 0 until children.length) {
+            if (children.item(index).nodeType == Node.ELEMENT_NODE) return true
+        }
+        return false
     }
 
     fun parseTime(value: String?): Instant? {

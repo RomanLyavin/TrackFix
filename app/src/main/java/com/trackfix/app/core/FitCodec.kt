@@ -31,7 +31,8 @@ data class FitRecord(
         ele = ele,
         time = timestamp,
         speedMetersPerSecond = speedMetersPerSecond,
-        cumulativeDistanceMeters = cumulativeDistanceMeters
+        cumulativeDistanceMeters = cumulativeDistanceMeters,
+        cadence = cadence
     )
 }
 

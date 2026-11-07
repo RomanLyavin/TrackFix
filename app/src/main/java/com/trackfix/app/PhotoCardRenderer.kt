@@ -3,10 +3,8 @@ package com.trackfix.app
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.Typeface
 import java.util.Locale
 import kotlin.math.ceil
@@ -29,9 +27,10 @@ data class PhotoActivityOverlay(
 /**
  * Draws the selected training metrics over a photo.
  *
- * The result keeps the aspect ratio of the source photo. A translucent panel
- * at the bottom makes the text readable on any background, and the metrics
- * are arranged in one or two columns depending on their count.
+ * The result keeps the aspect ratio of the source photo. There is no panel or
+ * frame: only the text is drawn, with a soft shadow so it stays readable on
+ * any background. The metrics are arranged in one or two columns depending on
+ * their count and anchored to the bottom margin.
  */
 object PhotoCardRenderer {
 
@@ -48,30 +47,13 @@ object PhotoCardRenderer {
         val canvas = Canvas(output)
         canvas.drawBitmap(photo, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
 
-        val gradientTop = height * 0.35f
-        val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = LinearGradient(
-                0f,
-                gradientTop,
-                0f,
-                height.toFloat(),
-                intArrayOf(
-                    Color.TRANSPARENT,
-                    Color.argb(45, 0, 0, 0),
-                    Color.argb(225, 0, 0, 0)
-                ),
-                floatArrayOf(0f, 0.32f, 1f),
-                Shader.TileMode.CLAMP
-            )
-        }
-        canvas.drawRect(0f, gradientTop, width.toFloat(), height.toFloat(), gradientPaint)
-
         val base = min(width, height).toFloat()
         val columns = if (metrics.size <= 1) 1 else 2
         val rows = ceil(metrics.size.toDouble() / columns).toInt().coerceAtLeast(1)
         val margin = width * 0.055f
-        val padding = width * 0.045f
-        val panelWidth = width - 2f * margin
+        val contentLeft = margin
+        val contentRight = width - margin
+        val contentBottom = height - margin
 
         var titleSize = base * 0.028f
         var labelSize = base * 0.019f
@@ -105,13 +87,13 @@ object PhotoCardRenderer {
             return labelHeight + valueHeight + base * 0.006f
         }
 
-        fun panelHeight(): Float {
-            return padding * 2f + headerHeight() + headerGap +
+        fun contentHeight(): Float {
+            return headerHeight() + headerGap +
                 rows * cellHeight() + (rows - 1) * cellGapY
         }
 
         var attempts = 0
-        while (panelHeight() > height * 0.72f && attempts < 12) {
+        while (contentHeight() > height * 0.72f && attempts < 12) {
             val scale = 0.88f
             titleSize *= scale
             labelSize *= scale
@@ -133,45 +115,7 @@ object PhotoCardRenderer {
             attempts++
         }
 
-        val panelHeightValue = panelHeight()
-        val panelLeft = margin
-        val panelRight = margin + panelWidth
-        val panelBottom = height - margin
-        val panelTop = panelBottom - panelHeightValue
-        val corner = base * 0.022f
-
-        val panelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.argb(158, 8, 20, 16)
-        }
-        canvas.drawRoundRect(
-            panelLeft,
-            panelTop,
-            panelRight,
-            panelBottom,
-            corner,
-            corner,
-            panelPaint
-        )
-
-        val accentHeight = base * 0.006f
-        val accentPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(94, 224, 176)
-        }
-        val accentLeft = panelLeft + padding
-        val accentTop = panelTop + padding * 0.55f
-        canvas.drawRoundRect(
-            accentLeft,
-            accentTop,
-            accentLeft + base * 0.09f,
-            accentTop + accentHeight,
-            accentHeight / 2f,
-            accentHeight / 2f,
-            accentPaint
-        )
-
-        val contentLeft = panelLeft + padding
-        val contentRight = panelRight - padding
-        val headerTop = panelTop + padding
+        val headerTop = contentBottom - contentHeight()
         val titleBaseline = headerTop - titlePaint.fontMetrics.ascent
         val titleWidth = titlePaint.measureText(title)
         canvas.drawText(title, contentLeft, titleBaseline, titlePaint)
@@ -260,6 +204,14 @@ object PhotoCardRenderer {
             textSize = size
             this.color = color
             typeface = Typeface.create("sans-serif", style)
+            // A soft shadow instead of a panel keeps the text readable on
+            // both light and dark photos without covering the image.
+            setShadowLayer(
+                maxOf(1f, size * 0.16f),
+                0f,
+                size * 0.06f,
+                Color.argb(190, 0, 0, 0)
+            )
         }
     }
 

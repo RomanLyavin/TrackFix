@@ -18,6 +18,7 @@ enum class FixWarning {
     LARGE_CHANGES,
     NO_REFERENCE_COVERAGE,
     REFERENCE_SEGMENTS,
+    NO_GPS_RECONSTRUCTED,
     NOTHING_TO_FIX
 }
 
@@ -37,7 +38,8 @@ data class FixStats(
     val frozenRuns: Int = 0,
     val frozenCoordinates: Int = 0,
     val leadingFixed: Int = 0,
-    val trailingFixed: Int = 0
+    val trailingFixed: Int = 0,
+    val reconstructedCoordinates: Int = 0
 )
 
 class FixResult(

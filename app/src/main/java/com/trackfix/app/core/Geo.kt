@@ -136,7 +136,8 @@ data class TrackPoint(
     val ele: Double?,
     val time: Instant?,
     val speedMetersPerSecond: Double? = null,
-    val cumulativeDistanceMeters: Double? = null
+    val cumulativeDistanceMeters: Double? = null,
+    val cadence: Int? = null
 ) {
     val hasCoordinates: Boolean get() = Geo.isValidCoordinate(lat, lon)
 }

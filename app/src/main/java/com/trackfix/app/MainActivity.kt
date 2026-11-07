@@ -615,13 +615,21 @@ class MainActivity : AppCompatActivity() {
         val stats = result.stats
         val lines = mutableListOf<String>()
         lines.add(getString(R.string.summary_points, stats.totalPoints))
-        if (stats.fixedCoordinates > 0) {
+        if (stats.reconstructedCoordinates > 0) {
+            lines.add(
+                getString(
+                    R.string.summary_reconstructed,
+                    stats.reconstructedCoordinates
+                )
+            )
+        }
+        if (stats.fixedCoordinates > 0 && stats.reconstructedCoordinates == 0) {
             lines.add(getString(R.string.summary_fixed, stats.fixedCoordinates))
         }
         if (stats.frozenCoordinates > 0) {
             lines.add(getString(R.string.summary_frozen, stats.frozenCoordinates, stats.frozenRuns))
         }
-        if (stats.missingCoordinates > 0) {
+        if (stats.missingCoordinates > 0 && stats.reconstructedCoordinates == 0) {
             lines.add(getString(R.string.summary_missing, stats.missingCoordinates))
         }
         if (stats.filledElevations > 0) {
@@ -669,6 +677,9 @@ class MainActivity : AppCompatActivity() {
         }
         if (FixWarning.REFERENCE_SEGMENTS in result.warnings) {
             warningLines.add(getString(R.string.warning_reference_segments))
+        }
+        if (FixWarning.NO_GPS_RECONSTRUCTED in result.warnings) {
+            warningLines.add(getString(R.string.warning_no_gps_reconstructed))
         }
         if (warningLines.isNotEmpty()) {
             tvWarning.text = warningLines.joinToString("\n\n")
@@ -825,6 +836,8 @@ class MainActivity : AppCompatActivity() {
         val message = when {
             e.message?.contains("too large", ignoreCase = true) == true ->
                 getString(R.string.file_too_large_hint)
+            e.message?.contains("no moving intervals", ignoreCase = true) == true ->
+                getString(R.string.error_no_moving_intervals)
             e is GpxException -> getString(R.string.error_invalid_gpx)
             else -> getString(R.string.error_generic, e.message ?: getString(R.string.error_read))
         }

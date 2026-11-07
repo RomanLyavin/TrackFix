@@ -67,7 +67,22 @@ object FixEngine {
             throw GpxException("reference has fewer than two valid points", e)
         }
 
-        val result = TrackFixer(reference, settings).fix(original.trackPoints())
+        val points = original.trackPoints()
+        val hasAnyCoordinate = points.any { it.hasCoordinates }
+        val result = if (hasAnyCoordinate) {
+            TrackFixer(reference, settings).fix(points)
+        } else {
+            // A recording without a single GPS fix cannot be repaired by
+            // matching points to the reference. Rebuild the whole route from
+            // the reference and the source moving time instead.
+            val rebuilt = NoGpsReconstructor.reconstruct(
+                points,
+                reference,
+                settings.fillMissingElevation
+            )
+            GpxCodec.removeDistanceExtensions(original)
+            rebuilt
+        }
         GpxCodec.applyFixes(original, result)
         val output = GpxCodec.serialize(original)
         val name = GpxCodec.suggestedName(originalName, "_fixed")
