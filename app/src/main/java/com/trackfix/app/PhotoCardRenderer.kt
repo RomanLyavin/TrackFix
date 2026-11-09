@@ -39,7 +39,8 @@ object PhotoCardRenderer {
         metrics: List<PhotoMetricLine>,
         title: String,
         subtitle: String?,
-        activity: PhotoActivityOverlay? = null
+        activity: PhotoActivityOverlay? = null,
+        logo: Bitmap? = null
     ): Bitmap {
         val width = photo.width
         val height = photo.height
@@ -133,41 +134,83 @@ object PhotoCardRenderer {
         val suffixRight = contentRight - subtitleWidth -
             (if (subtitleWidth > 0f) base * 0.03f else 0f)
         val suffixAvailable = suffixRight - suffixLeft
-        if (activity != null && suffixAvailable > base * 0.01f) {
-            val icon = activity.icon
-            val activityText = activity.text?.trim()
-            if (icon != null && !icon.isRecycled) {
-                val lineHeight =
-                    titlePaint.fontMetrics.descent - titlePaint.fontMetrics.ascent
-                var iconHeight = lineHeight * 0.92f
-                var iconWidth =
-                    iconHeight * icon.width.toFloat() / icon.height.toFloat()
-                if (iconWidth > suffixAvailable) {
-                    val scale = suffixAvailable / iconWidth
-                    iconHeight *= scale
-                    iconWidth *= scale
-                }
-                val centerY = titleBaseline +
-                    (titlePaint.fontMetrics.ascent + titlePaint.fontMetrics.descent) / 2f
-                val iconRect = RectF(
-                    suffixLeft,
-                    centerY - iconHeight / 2f,
-                    suffixLeft + iconWidth,
-                    centerY + iconHeight / 2f
-                )
-                val iconPaint = Paint(
-                    Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG
-                )
-                canvas.drawBitmap(icon, null, iconRect, iconPaint)
-            } else if (!activityText.isNullOrBlank()) {
-                val activityPaint = textPaint(
+        if ((activity != null || logo != null) && suffixAvailable > base * 0.01f) {
+            val lineHeight =
+                titlePaint.fontMetrics.descent - titlePaint.fontMetrics.ascent
+            val centerY = titleBaseline +
+                (titlePaint.fontMetrics.ascent + titlePaint.fontMetrics.descent) / 2f
+            val gap = base * 0.012f
+            val activityIcon = activity?.icon?.takeIf { !it.isRecycled }
+            val activityText = activity?.text?.trim()
+            val logoBitmap = logo?.takeIf { !it.isRecycled }
+
+            var iconHeight = lineHeight * 0.92f
+            var iconWidth = if (activityIcon != null) {
+                iconHeight * activityIcon.width.toFloat() / activityIcon.height.toFloat()
+            } else {
+                0f
+            }
+            var logoHeight = if (logoBitmap != null) lineHeight * 0.92f else 0f
+            var logoWidth = if (logoBitmap != null) {
+                logoHeight * logoBitmap.width.toFloat() / logoBitmap.height.toFloat()
+            } else {
+                0f
+            }
+
+            var activityPaint: Paint? = null
+            var textWidth = 0f
+            if (activityIcon == null && !activityText.isNullOrBlank()) {
+                activityPaint = textPaint(
                     titleSize * 0.82f,
                     Color.argb(235, 255, 255, 255),
                     Typeface.BOLD
                 )
+                textWidth = activityPaint.measureText(activityText)
+            }
+
+            val activityWidth = if (activityIcon != null) iconWidth else textWidth
+            var totalWidth = activityWidth + logoWidth
+            if (activityWidth > 0f && logoWidth > 0f) totalWidth += gap
+            if (totalWidth > suffixAvailable) {
+                val scale = suffixAvailable / totalWidth
+                iconHeight *= scale
+                iconWidth *= scale
+                logoHeight *= scale
+                logoWidth *= scale
+                if (activityPaint != null && activityText != null) {
+                    activityPaint.textSize *= scale
+                    textWidth = activityPaint.measureText(activityText)
+                }
+            }
+
+            val bitmapPaint = Paint(
+                Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG
+            )
+            var cursor = suffixLeft
+            if (activityIcon != null) {
+                val iconRect = RectF(
+                    cursor,
+                    centerY - iconHeight / 2f,
+                    cursor + iconWidth,
+                    centerY + iconHeight / 2f
+                )
+                canvas.drawBitmap(activityIcon, null, iconRect, bitmapPaint)
+                cursor += iconWidth
+            } else if (activityPaint != null && !activityText.isNullOrBlank()) {
                 val activityLinePaint =
                     fittedPaint(activityPaint, activityText, suffixAvailable)
-                canvas.drawText(activityText, suffixLeft, titleBaseline, activityLinePaint)
+                canvas.drawText(activityText, cursor, titleBaseline, activityLinePaint)
+                cursor += activityLinePaint.measureText(activityText)
+            }
+            if (logoBitmap != null) {
+                if (cursor > suffixLeft) cursor += gap
+                val logoRect = RectF(
+                    cursor,
+                    centerY - logoHeight / 2f,
+                    cursor + logoWidth,
+                    centerY + logoHeight / 2f
+                )
+                canvas.drawBitmap(logoBitmap, null, logoRect, bitmapPaint)
             }
         }
 

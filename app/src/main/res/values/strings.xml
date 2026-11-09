@@ -102,6 +102,7 @@
     <string name="photo_activity_bike">Вело</string>
     <string name="photo_activity_custom">Своё</string>
     <string name="photo_activity_custom_hint">Свой текст</string>
+    <string name="photo_show_logo">Добавить логотип Kuban Runners</string>
     <string name="photo_metric_moving_time">Время (без пауз)</string>
     <string name="photo_metric_distance">Дистанция</string>
     <string name="photo_metric_average_pace">Средний темп (мин/км)</string>
@@ -122,8 +123,10 @@
     <string name="about_button">О программе</string>
     <string name="support_button">Поддержать</string>
     <string name="about_title">О программе</string>
-    <string name="about_version">TrackFix 1.5.0</string>
+    <string name="about_version">TrackFix 1.6.0</string>
     <string name="about_developer">Разработчик: Лявин Роман</string>
+    <string name="about_telegram">Телеграм-чат: https://t.me/+0oJbL1UtVVhkYzli</string>
+    <string name="about_logo_desc">Логотип Kuban Runners</string>
     <string name="about_ai">При разработке использована ИИ-модель OpenCode.</string>
     <string name="about_email">Почта: lyrv@t-inform.ru</string>
     <string name="support_title">Поддержать проект</string>
@@ -133,8 +136,8 @@
     <string name="close">Закрыть</string>
     <string name="error_open_link">Не удалось открыть ссылку.</string>
 
-    <string name="privacy_note">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылке поддержки.</string>
-    <string name="version_note">TrackFix 1.5.0 · GPX, FIT, трек без GPS и фото</string>
+    <string name="privacy_note">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылкам поддержки и телеграм-чата.</string>
+    <string name="version_note">TrackFix 1.6.0 · GPX, FIT, трек без GPS, логотип и фото</string>
 
     <plurals name="points_count">
         <item quantity="one">%1$d точка</item>
@@ -148,6 +151,7 @@
     <string name="summary_title">Результат</string>
     <string name="summary_points">Точек в треке: %1$d</string>
     <string name="summary_reconstructed">Восстановлено по эталону точек: %1$d</string>
+    <string name="summary_inserted">Добавлено промежуточных точек в длинных пропусках: %1$d</string>
     <string name="summary_fixed">Исправлено координат: %1$d</string>
     <string name="summary_frozen">Восстановлено после зависания GPS: %1$d точек (участков: %2$d)</string>
     <string name="summary_missing">Заполнено пропущенных координат: %1$d</string>

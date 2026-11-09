@@ -157,6 +157,57 @@ object GpxCodec {
     }
 
     /**
+     * Inserts new points directly after their source point, inside the same
+     * `<trkseg>`. Used only for long recording gaps where the route would
+     * otherwise be drawn as a straight chord.
+     */
+    fun applyInsertedPoints(file: GpxFile, inserted: List<InsertedPoint>) {
+        if (inserted.isEmpty()) return
+        val byAfter = inserted.groupBy { it.afterIndex }
+        for (source in file.points) {
+            val additions = byAfter[source.index] ?: continue
+            val next = file.points.getOrNull(source.index + 1)
+            if (next != null && next.segmentIndex != source.segmentIndex) continue
+            var anchor: Node = source.element
+            for (point in additions.sortedBy { it.time }) {
+                val element = createTrackPoint(file, point)
+                val parent = anchor.parentNode ?: break
+                parent.insertBefore(element, anchor.nextSibling)
+                anchor = element
+            }
+        }
+    }
+
+    private fun createTrackPoint(file: GpxFile, point: InsertedPoint): Element {
+        val document = file.document
+        val namespaceUri = file.namespaceUri
+        val trkpt = if (namespaceUri.isNullOrBlank()) {
+            document.createElement("trkpt")
+        } else {
+            document.createElementNS(namespaceUri, "trkpt")
+        }
+        trkpt.setAttribute("lat", formatCoordinate(point.lat))
+        trkpt.setAttribute("lon", formatCoordinate(point.lon))
+        if (point.ele != null) {
+            val ele = if (namespaceUri.isNullOrBlank()) {
+                document.createElement("ele")
+            } else {
+                document.createElementNS(namespaceUri, "ele")
+            }
+            ele.textContent = formatElevation(point.ele)
+            trkpt.appendChild(ele)
+        }
+        val time = if (namespaceUri.isNullOrBlank()) {
+            document.createElement("time")
+        } else {
+            document.createElementNS(namespaceUri, "time")
+        }
+        time.textContent = point.time.toString()
+        trkpt.appendChild(time)
+        return trkpt
+    }
+
+    /**
      * Removes the per-point cumulative "distance" extension. It becomes stale
      * when coordinates are rebuilt from a reference track, and some services
      * (Strava in particular) trust it instead of the real geometry.

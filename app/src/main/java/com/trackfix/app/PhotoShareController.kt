@@ -78,6 +78,7 @@ class PhotoShareController(
     private var customActivityText = ""
     private var runActivityIcon: Bitmap? = null
     private var bikeActivityIcon: Bitmap? = null
+    private var logoBitmap: Bitmap? = null
     private val customTextHandler = Handler(Looper.getMainLooper())
     private val customTextRender = Runnable {
         if (activityType == ActivityType.CUSTOM) requestRender()
@@ -99,6 +100,7 @@ class PhotoShareController(
     private lateinit var btnPickPhoto: MaterialButton
     private lateinit var tvPhotoMetricsNote: TextView
     private lateinit var activityGroup: MaterialButtonToggleGroup
+    private lateinit var cbPhotoLogo: MaterialCheckBox
     private lateinit var tilPhotoActivityCustom: TextInputLayout
     private lateinit var etPhotoActivityCustom: TextInputEditText
     private lateinit var photoPreviewCard: View
@@ -149,6 +151,7 @@ class PhotoShareController(
         btnPhotoSave = activity.findViewById(R.id.btnPhotoSave)
         btnPhotoShare = activity.findViewById(R.id.btnPhotoShare)
         activityGroup = activity.findViewById(R.id.activityGroup)
+        cbPhotoLogo = activity.findViewById(R.id.cbPhotoLogo)
         tilPhotoActivityCustom = activity.findViewById(R.id.tilPhotoActivityCustom)
         etPhotoActivityCustom = activity.findViewById(R.id.etPhotoActivityCustom)
 
@@ -202,6 +205,12 @@ class PhotoShareController(
 
         runActivityIcon = decodeActivityIcon(R.drawable.ic_activity_run)
         bikeActivityIcon = decodeActivityIcon(R.drawable.ic_activity_bike)
+        logoBitmap = decodeActivityIcon(R.drawable.kr_logo)
+        cbPhotoLogo.isChecked = preferences.getBoolean(PREF_SHOW_LOGO, true)
+        cbPhotoLogo.setOnCheckedChangeListener { _, isChecked ->
+            preferences.edit().putBoolean(PREF_SHOW_LOGO, isChecked).apply()
+            requestRender()
+        }
 
         activityType = preferences.getString(PREF_ACTIVITY_TYPE, null)
             ?.let { saved -> ActivityType.values().firstOrNull { it.name == saved } }
@@ -547,11 +556,19 @@ class PhotoShareController(
         val subtitle = stats.startTime?.let { formatDate(it) }
         val title = activity.getString(R.string.photo_overlay_title)
         val activityOverlay = currentActivityOverlay()
+        val logo = if (cbPhotoLogo.isChecked) logoBitmap else null
 
         executor.execute {
             try {
                 val rendered =
-                    PhotoCardRenderer.render(photo, lines, title, subtitle, activityOverlay)
+                    PhotoCardRenderer.render(
+                        photo,
+                        lines,
+                        title,
+                        subtitle,
+                        activityOverlay,
+                        logo
+                    )
                 activity.runOnUiThread {
                     if (token != renderToken || activity.isFinishing ||
                         activity.isDestroyed
@@ -858,6 +875,7 @@ class PhotoShareController(
         private const val PREFERENCES_NAME = "photo_preferences"
         private const val PREF_ACTIVITY_TYPE = "photo_activity_type"
         private const val PREF_ACTIVITY_CUSTOM_TEXT = "photo_activity_custom_text"
+        private const val PREF_SHOW_LOGO = "photo_show_logo"
         private const val CUSTOM_TEXT_DEBOUNCE_MS = 350L
         private const val PREVIEW_MAX_DIMENSION = 1600
     }

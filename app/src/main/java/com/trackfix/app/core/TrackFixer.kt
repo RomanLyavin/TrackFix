@@ -39,7 +39,21 @@ data class FixStats(
     val frozenCoordinates: Int = 0,
     val leadingFixed: Int = 0,
     val trailingFixed: Int = 0,
-    val reconstructedCoordinates: Int = 0
+    val reconstructedCoordinates: Int = 0,
+    val insertedPoints: Int = 0
+)
+
+/**
+ * A new track point that must be inserted after an existing source point.
+ * Used only when a recording has long gaps and the route would otherwise be
+ * drawn as a straight chord across the reference loop.
+ */
+data class InsertedPoint(
+    val afterIndex: Int,
+    val lat: Double,
+    val lon: Double,
+    val ele: Double?,
+    val time: Instant
 )
 
 class FixResult(
@@ -49,7 +63,8 @@ class FixResult(
     val coordinateChanged: BooleanArray,
     val elevationFilled: BooleanArray,
     val stats: FixStats,
-    val warnings: Set<FixWarning>
+    val warnings: Set<FixWarning>,
+    val inserted: List<InsertedPoint> = emptyList()
 )
 
 private data class PathChoice(

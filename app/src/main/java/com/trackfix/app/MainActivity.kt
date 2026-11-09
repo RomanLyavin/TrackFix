@@ -623,6 +623,9 @@ class MainActivity : AppCompatActivity() {
                 )
             )
         }
+        if (stats.insertedPoints > 0) {
+            lines.add(getString(R.string.summary_inserted, stats.insertedPoints))
+        }
         if (stats.fixedCoordinates > 0 && stats.reconstructedCoordinates == 0) {
             lines.add(getString(R.string.summary_fixed, stats.fixedCoordinates))
         }
@@ -867,11 +870,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun showAbout() {
         val view = layoutInflater.inflate(R.layout.dialog_about, null)
+        view.findViewById<View>(R.id.tvAboutTelegram).setOnClickListener {
+            openTelegram()
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.about_title)
             .setView(view)
             .setPositiveButton(R.string.close, null)
             .show()
+    }
+
+    private fun openTelegram() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TELEGRAM_URL)))
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot open Telegram link", e)
+            Toast.makeText(this, R.string.error_open_link, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun showSupport() {
@@ -953,5 +968,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_REFERENCE_URI = "reference_uri"
         private const val KEY_MERGE_URIS = "merge_uris"
         private const val SUPPORT_URL = "https://t.tb.ru/pm_short/AOdA22MAdsS"
+        private const val TELEGRAM_URL = "https://t.me/+0oJbL1UtVVhkYzli"
     }
 }

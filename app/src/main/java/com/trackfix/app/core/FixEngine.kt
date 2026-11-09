@@ -84,6 +84,7 @@ object FixEngine {
             rebuilt
         }
         GpxCodec.applyFixes(original, result)
+        GpxCodec.applyInsertedPoints(original, result.inserted)
         val output = GpxCodec.serialize(original)
         val name = GpxCodec.suggestedName(originalName, "_fixed")
 
