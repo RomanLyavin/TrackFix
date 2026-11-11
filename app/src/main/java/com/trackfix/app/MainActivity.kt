@@ -5,17 +5,22 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.text.SpannableString
 import android.text.Spanned
+import android.text.format.Formatter
 import android.text.style.ImageSpan
 import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.card.MaterialCardView
@@ -36,7 +41,11 @@ import com.trackfix.app.core.MergeResult
 import com.trackfix.app.core.ProcessResult
 import com.trackfix.app.core.ReferenceInfo
 import com.trackfix.app.core.TrackInfo
+import com.trackfix.app.update.ApkVerifier
+import com.trackfix.app.update.GitHubRelease
+import com.trackfix.app.update.GitHubUpdate
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -64,6 +73,10 @@ class MainActivity : AppCompatActivity() {
     private var originalLoadToken = 0
     private var referenceLoadToken = 0
     private var mergeLoadToken = 0
+    private val updateExecutor = Executors.newSingleThreadExecutor()
+    private var updateDialog: AlertDialog? = null
+    private var updateBusy = false
+    private var pendingUpdateApk: File? = null
 
     private val mergeTimeFormatter: DateTimeFormatter =
         DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm", Locale.forLanguageTag("ru-RU"))
@@ -127,6 +140,18 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.CreateDocument("application/gpx+xml")
     ) { uri ->
         if (uri != null) saveResult(uri)
+    }
+
+    private val installPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val apk = pendingUpdateApk ?: return@registerForActivityResult
+        if (packageManager.canRequestPackageInstalls()) {
+            pendingUpdateApk = null
+            installApk(apk)
+        } else {
+            Toast.makeText(this, R.string.update_permission_needed, Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -266,6 +291,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        dismissUpdateDialog()
+        updateExecutor.shutdownNow()
         photoShareController.destroy()
         super.onDestroy()
         executor.shutdownNow()
@@ -880,6 +907,9 @@ class MainActivity : AppCompatActivity() {
         view.findViewById<View>(R.id.rowAboutUpdate).setOnClickListener {
             openTelegramChannel()
         }
+        view.findViewById<View>(R.id.rowAboutCheckUpdates).setOnClickListener {
+            checkForUpdates()
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.about_title)
             .setView(view)
@@ -934,6 +964,249 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.e(TAG, "Cannot open $label link", e)
             Toast.makeText(this, R.string.error_open_link, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun checkForUpdates() {
+        if (updateBusy) {
+            Toast.makeText(this, R.string.update_busy, Toast.LENGTH_SHORT).show()
+            return
+        }
+        updateBusy = true
+        showUpdateProgress(
+            getString(R.string.update_checking),
+            getString(R.string.update_checking_hint),
+            indeterminate = true
+        )
+        val currentVersion = currentVersionName()
+        updateExecutor.execute {
+            try {
+                val release = GitHubUpdate.fetchLatest(
+                    currentVersion,
+                    BuildConfig.GITHUB_TOKEN
+                )
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    dismissUpdateDialog()
+                    updateBusy = false
+                    when {
+                        !GitHubUpdate.isNewer(release.version, currentVersion) ->
+                            showLatestVersion(currentVersion)
+                        release.apkUrl.isNullOrBlank() -> showUpdateError(
+                            R.string.update_error_title,
+                            getString(R.string.update_no_apk),
+                            null
+                        )
+                        else -> showUpdateAvailable(release)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Update check failed", e)
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    dismissUpdateDialog()
+                    updateBusy = false
+                    showUpdateError(
+                        R.string.update_error_title,
+                        getString(R.string.update_error_message),
+                        ::checkForUpdates
+                    )
+                }
+            }
+        }
+    }
+
+    private fun showLatestVersion(currentVersion: String) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_latest_title)
+            .setMessage(getString(R.string.update_latest_message, currentVersion))
+            .setPositiveButton(R.string.close, null)
+            .show()
+    }
+
+    private fun showUpdateAvailable(release: GitHubRelease) {
+        val size = if (release.apkSize > 0L) {
+            Formatter.formatShortFileSize(this, release.apkSize)
+        } else {
+            getString(R.string.update_size_unknown)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.update_available_title)
+            .setMessage(getString(R.string.update_available_message, release.version, size))
+            .setPositiveButton(R.string.update_download) { _, _ -> downloadUpdate(release) }
+            .setNegativeButton(R.string.update_later, null)
+            .show()
+    }
+
+    private fun downloadUpdate(release: GitHubRelease) {
+        if (updateBusy) {
+            Toast.makeText(this, R.string.update_busy, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val apkUrl = release.apkUrl ?: return
+        updateBusy = true
+        showUpdateProgress(
+            getString(R.string.update_downloading_title),
+            getString(R.string.update_downloading_text, release.version),
+            indeterminate = false
+        )
+        val currentVersion = currentVersionName()
+        updateExecutor.execute {
+            try {
+                val directory = File(cacheDir, "updates").apply { mkdirs() }
+                directory.listFiles()?.forEach { it.delete() }
+                val target = File(directory, "TrackFix-${release.version}.apk")
+                GitHubUpdate.downloadApk(
+                    apkUrl,
+                    target,
+                    release.apkSize,
+                    currentVersion,
+                    BuildConfig.GITHUB_TOKEN
+                ) { percent ->
+                    runOnUiThread {
+                        if (!isFinishing && !isDestroyed) updateProgress(percent)
+                    }
+                }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    dismissUpdateDialog()
+                    updateBusy = false
+                    val archiveVersion = ApkVerifier.versionName(this, target)
+                    if (!ApkVerifier.isSameApp(this, target) ||
+                        archiveVersion != release.version
+                    ) {
+                        target.delete()
+                        showUpdateError(
+                            R.string.update_download_error_title,
+                            getString(R.string.update_invalid_apk),
+                            { downloadUpdate(release) }
+                        )
+                    } else {
+                        installApk(target)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Update download failed", e)
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    dismissUpdateDialog()
+                    updateBusy = false
+                    showUpdateError(
+                        R.string.update_download_error_title,
+                        getString(R.string.update_download_error_message),
+                        { downloadUpdate(release) }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun showUpdateProgress(
+        title: String,
+        message: String,
+        indeterminate: Boolean
+    ) {
+        dismissUpdateDialog()
+        val view = layoutInflater.inflate(R.layout.dialog_update_progress, null)
+        val progress = view.findViewById<ProgressBar>(R.id.progressUpdate)
+        val text = view.findViewById<TextView>(R.id.tvUpdateProgressText)
+        progress.isIndeterminate = indeterminate
+        if (!indeterminate) progress.progress = 0
+        text.text = message
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(title)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        updateDialog = dialog
+    }
+
+    private fun updateProgress(percent: Int) {
+        val dialog = updateDialog ?: return
+        val progress = dialog.findViewById<ProgressBar>(R.id.progressUpdate) ?: return
+        progress.isIndeterminate = false
+        progress.progress = percent
+        val text = dialog.findViewById<TextView>(R.id.tvUpdateProgressText) ?: return
+        text.text = getString(R.string.update_download_progress, percent)
+    }
+
+    private fun dismissUpdateDialog() {
+        updateDialog?.dismiss()
+        updateDialog = null
+    }
+
+    private fun showUpdateError(
+        titleRes: Int,
+        message: String,
+        retry: (() -> Unit)?
+    ) {
+        val builder = MaterialAlertDialogBuilder(this)
+            .setTitle(titleRes)
+            .setMessage(message)
+        if (retry != null) {
+            builder.setPositiveButton(R.string.update_retry) { _, _ -> retry() }
+            builder.setNegativeButton(R.string.close, null)
+        } else {
+            builder.setPositiveButton(R.string.close, null)
+        }
+        builder.show()
+    }
+
+    private fun installApk(file: File) {
+        if (!file.exists()) {
+            Toast.makeText(this, R.string.update_download_error_message, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!packageManager.canRequestPackageInstalls()) {
+            pendingUpdateApk = file
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.update_permission_title)
+                .setMessage(R.string.update_permission_message)
+                .setPositiveButton(R.string.update_open_settings) { _, _ ->
+                    openInstallPermissionSettings()
+                }
+                .setNegativeButton(R.string.update_later, null)
+                .show()
+            return
+        }
+        pendingUpdateApk = null
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            file
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot open APK installer", e)
+            Toast.makeText(this, R.string.update_install_error, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun openInstallPermissionSettings() {
+        try {
+            installPermissionLauncher.launch(
+                Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot open unknown sources settings", e)
+            Toast.makeText(this, R.string.update_install_error, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun currentVersionName(): String {
+        return try {
+            packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+        } catch (e: Exception) {
+            "0"
         }
     }
 
