@@ -110,6 +110,47 @@ class NoGpsReconstructionTest {
     }
 
     @Test
+    fun fasterIntervalsGetMoreReferenceDistance() {
+        val vertices = (0..300).map { index ->
+            RefVertex(startLat + index * latStep, startLon, 20.0)
+        }
+        val reference = ReferencePath(listOf(vertices))
+        // Ten-second intervals: five at 4 m/s, one transition, four at 1 m/s.
+        // The source distance is 200 + 25 + 40 = 265 units, so the fast half
+        // must receive 200/265 of the reference, not half of it.
+        val input = (0..10).map { index ->
+            TrackPoint(
+                lat = null,
+                lon = null,
+                ele = null,
+                time = start.plusSeconds(index * 10L),
+                speedMetersPerSecond = if (index <= 5) 4.0 else 1.0,
+                cadence = 80
+            )
+        }
+
+        val result = NoGpsReconstructor.reconstruct(
+            input,
+            reference,
+            fillMissingElevation = false
+        )
+
+        val expectedFraction = 200.0 / 265.0
+        val expectedLat = startLat + expectedFraction * 300 * latStep
+        assertEquals(11, result.stats.totalPoints)
+        assertEquals(0, result.stats.insertedPoints)
+        assertEquals(expectedLat, result.lat[5]!!, 1e-6)
+        assertEquals(startLat + 300 * latStep, result.lat[10]!!, 1e-9)
+
+        val fastAdvance = result.lat[5]!! - result.lat[0]!!
+        val slowAdvance = result.lat[10]!! - result.lat[5]!!
+        assertTrue(
+            "fast half advanced $fastAdvance, slow half $slowAdvance",
+            fastAdvance > slowAdvance * 2.9
+        )
+    }
+
+    @Test
     fun realFitWithoutGpsIsRebuiltFromTheReferenceRoute() {
         val sourceBytes = resource("no_gps_source.fit")
         val referenceBytes = resource("no_gps_reference.gpx")

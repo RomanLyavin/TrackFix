@@ -5,6 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ImageSpan
 import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
@@ -12,6 +15,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.card.MaterialCardView
@@ -870,8 +874,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun showAbout() {
         val view = layoutInflater.inflate(R.layout.dialog_about, null)
-        view.findViewById<View>(R.id.tvAboutTelegram).setOnClickListener {
-            openTelegram()
+        val telegram = view.findViewById<TextView>(R.id.tvAboutTelegram)
+        telegram.text = telegramLinkText(telegram.textSize)
+        telegram.setOnClickListener { openTelegram() }
+        view.findViewById<View>(R.id.rowAboutUpdate).setOnClickListener {
+            openTelegramChannel()
         }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.about_title)
@@ -880,11 +887,52 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    /**
+     * Builds the Telegram chat label with the same runner mark that is used on
+     * photos. The white photo icon is tinted to the brand colour so it stays
+     * visible on the light dialog background.
+     */
+    private fun telegramLinkText(textSize: Float): CharSequence {
+        val prefix = getString(R.string.about_telegram_prefix)
+        val suffix = getString(R.string.about_telegram_suffix)
+        val placeholder = "\uFFFC"
+        val text = SpannableString("$prefix $placeholder $suffix")
+        val drawable = ContextCompat.getDrawable(this, R.drawable.ic_activity_run)
+            ?.mutate() ?: return text
+        drawable.setTint(ContextCompat.getColor(this, R.color.brand))
+        val height = textSize.toInt().coerceAtLeast(1)
+        val width = if (drawable.intrinsicHeight > 0) {
+            (height * drawable.intrinsicWidth / drawable.intrinsicHeight)
+                .coerceAtLeast(1)
+        } else {
+            height
+        }
+        drawable.setBounds(0, 0, width, height)
+        val start = text.toString().indexOf(placeholder)
+        if (start >= 0) {
+            text.setSpan(
+                ImageSpan(drawable, ImageSpan.ALIGN_CENTER),
+                start,
+                start + 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+        }
+        return text
+    }
+
     private fun openTelegram() {
+        openExternalLink(TELEGRAM_URL, "Telegram chat")
+    }
+
+    private fun openTelegramChannel() {
+        openExternalLink(UPDATE_URL, "Telegram update channel")
+    }
+
+    private fun openExternalLink(url: String, label: String) {
         try {
-            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TELEGRAM_URL)))
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (e: Exception) {
-            Log.e(TAG, "Cannot open Telegram link", e)
+            Log.e(TAG, "Cannot open $label link", e)
             Toast.makeText(this, R.string.error_open_link, Toast.LENGTH_LONG).show()
         }
     }
@@ -969,5 +1017,6 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_MERGE_URIS = "merge_uris"
         private const val SUPPORT_URL = "https://t.tb.ru/pm_short/AOdA22MAdsS"
         private const val TELEGRAM_URL = "https://t.me/+0oJbL1UtVVhkYzli"
+        private const val UPDATE_URL = "https://t.me/trackFix"
     }
 }

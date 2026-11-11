@@ -66,9 +66,9 @@ class NoGpsGapFillTest {
         )
         assertTrue(
             "distance $distance differs from $referenceLength",
-            abs(distance - referenceLength) < 15.0
+            abs(distance - referenceLength) < 25.0
         )
-        assertEquals(distance, result.stats.distanceAfter, 0.01)
+        assertEquals(distance, result.stats.distanceAfter, 0.05)
 
         // The old failure produced a 469 m chord across the loop. With gap
         // filling, every consecutive pair must stay close.

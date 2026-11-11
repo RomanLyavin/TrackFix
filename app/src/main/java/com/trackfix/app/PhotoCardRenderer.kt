@@ -57,8 +57,10 @@ object PhotoCardRenderer {
         val contentBottom = height - margin
 
         var titleSize = base * 0.028f
-        var labelSize = base * 0.019f
-        var valueSize = if (columns == 1) base * 0.052f else base * 0.038f
+        // The metric block is intentionally large: the labels stay normal and
+        // the values stay bold, but both are 1.5x the previous size.
+        var labelSize = base * 0.0285f
+        var valueSize = if (columns == 1) base * 0.078f else base * 0.057f
         var cellGapY = base * 0.018f
         var headerGap = base * 0.018f
 
@@ -79,7 +81,12 @@ object PhotoCardRenderer {
             val titleHeight = titlePaint.fontMetrics.descent - titlePaint.fontMetrics.ascent
             val subtitleHeight =
                 subtitlePaint.fontMetrics.descent - subtitlePaint.fontMetrics.ascent
-            return maxOf(titleHeight, subtitleHeight)
+            val logoHeight = if (logo != null && !logo.isRecycled) {
+                titleHeight * 1.5f
+            } else {
+                0f
+            }
+            return maxOf(titleHeight, subtitleHeight, logoHeight)
         }
 
         fun cellHeight(): Float {
@@ -150,7 +157,7 @@ object PhotoCardRenderer {
             } else {
                 0f
             }
-            var logoHeight = if (logoBitmap != null) lineHeight * 0.92f else 0f
+            var logoHeight = if (logoBitmap != null) lineHeight * 1.38f else 0f
             var logoWidth = if (logoBitmap != null) {
                 logoHeight * logoBitmap.width.toFloat() / logoBitmap.height.toFloat()
             } else {

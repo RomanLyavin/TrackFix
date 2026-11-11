@@ -115,6 +115,41 @@ class TrackFixerTest {
     }
 
     @Test
+    fun frozenCoordinatesUseSpeedWhenDistanceIsAbsent() {
+        val input = track()
+        val frozenLat = startLat + 25 * latStep
+        for (index in input.indices) {
+            input[index] = input[index].copy(
+                speedMetersPerSecond = 2.0,
+                cumulativeDistanceMeters = null
+            )
+        }
+        for (index in 20..29) {
+            input[index] = input[index].copy(
+                lat = frozenLat,
+                lon = startLon,
+                speedMetersPerSecond = 2.0
+            )
+        }
+
+        val result = TrackFixer(reference(), FixSettings(30.0)).fix(input)
+
+        assertEquals(1, result.stats.frozenRuns)
+        assertEquals(10, result.stats.frozenCoordinates)
+        for (index in 20..29) {
+            assertEquals(
+                "frozen point $index was not distributed by speed",
+                startLat + index * latStep,
+                result.lat[index]!!,
+                0.00002
+            )
+            assertEquals(startLon, result.lon[index]!!, 0.00002)
+        }
+        assertEquals(input[19].lat!!, result.lat[19]!!, 1e-10)
+        assertEquals(input[30].lat!!, result.lat[30]!!, 1e-10)
+    }
+
+    @Test
     fun cleanTrackIsNotChanged() {
         val input = track()
         val result = TrackFixer(reference(), FixSettings(30.0)).fix(input)

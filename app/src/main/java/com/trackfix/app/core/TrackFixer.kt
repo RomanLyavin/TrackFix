@@ -135,6 +135,13 @@ class TrackFixer(
         val medianSpeed = Geo.median(speeds) ?: 3.0
         val speedLimit = (medianSpeed * 3.0).coerceIn(10.0, 45.0)
         val medianSpacing = Geo.median(spacings.filter { it > 0.5 }) ?: 5.0
+        // Distance actually travelled according to the source sensors. It is
+        // used to spread a repaired block along the reference in the same
+        // proportion as the original intervals (fast/slow blocks stay
+        // distinguishable), instead of using a single average speed.
+        val sourceFallbackSpeed = SourceDistance.medianSpeed(input)
+            ?.takeIf { it > 0.0 } ?: medianSpeed
+        val sourcePrefix = SourceDistance.prefixMeters(input, sourceFallbackSpeed)
 
         val suspicious = BooleanArray(n)
         for (i in 1 until n) {
@@ -257,21 +264,25 @@ class TrackFixer(
                 } else {
                     null
                 }
-            val expected = expectedDistance(block, input, left, right, medianSpeed, medianSpacing)
+            val expected = expectedDistance(
+                block, input, left, right, medianSpeed, medianSpacing, sourcePrefix
+            )
             val clampEdges = (block.first..block.last).any { frozenFlag[it] }
 
             val repaired = when {
                 left != null && right != null -> repairBetween(
                     block, left, right, expected, input, lat, lon, ele,
-                    coordinateChanged, elevationFilled, threshold
+                    coordinateChanged, elevationFilled, threshold, sourcePrefix
                 )
                 left != null -> repairOneSide(
                     block, left, 1, input, lat, lon, ele,
-                    coordinateChanged, elevationFilled, medianSpeed, medianSpacing, threshold, clampEdges
+                    coordinateChanged, elevationFilled, medianSpeed, medianSpacing,
+                    threshold, clampEdges, sourcePrefix
                 )
                 right != null -> repairOneSide(
                     block, right, -1, input, lat, lon, ele,
-                    coordinateChanged, elevationFilled, medianSpeed, medianSpacing, threshold, clampEdges
+                    coordinateChanged, elevationFilled, medianSpeed, medianSpacing,
+                    threshold, clampEdges, sourcePrefix
                 )
                 else -> repairWithoutAnchors(
                     block, input, lat, lon, ele, coordinateChanged, elevationFilled, threshold
@@ -519,13 +530,16 @@ class TrackFixer(
         left: Int?,
         right: Int?,
         medianSpeed: Double,
-        medianSpacing: Double
+        medianSpacing: Double,
+        sourcePrefix: DoubleArray
     ): Double {
         if (left != null && right != null) {
             if (blockSensorDistanceUsable(input, block, left, right)) {
                 return (input[right].cumulativeDistanceMeters!! -
                     input[left].cumulativeDistanceMeters!!).coerceAtLeast(10.0)
             }
+            val source = sourcePrefix[right] - sourcePrefix[left]
+            if (source >= 10.0) return source
             val seconds = secondsBetween(input[left].time, input[right].time)
             if (seconds != null && seconds > 0.0) {
                 return (seconds * medianSpeed).coerceAtLeast(10.0)
@@ -589,7 +603,8 @@ class TrackFixer(
         ele: Array<Double?>,
         coordinateChanged: BooleanArray,
         elevationFilled: BooleanArray,
-        threshold: Double
+        threshold: Double,
+        sourcePrefix: DoubleArray
     ): Boolean {
         val leftCandidates = reference.nearestCandidates(
             lat[left]!!, lon[left]!!,
@@ -658,7 +673,7 @@ class TrackFixer(
         for (index in block) {
             val fraction = fractionBetween(
                 index, left, right, input, startTime, endTime,
-                useDistance, startDistance, endDistance
+                useDistance, startDistance, endDistance, sourcePrefix
             )
             val s = choice.start.s + choice.direction * choice.length * fraction
             val vertex = path.pointAt(s, wrap = path.closed)
@@ -680,7 +695,8 @@ class TrackFixer(
         medianSpeed: Double,
         medianSpacing: Double,
         threshold: Double,
-        clampEdges: Boolean
+        clampEdges: Boolean,
+        sourcePrefix: DoubleArray
     ): Boolean {
         val edgeBlock = block.first == 0 || block.last == input.size - 1
         val searchRadius = if (edgeBlock) {
@@ -709,19 +725,24 @@ class TrackFixer(
             var targetS: Double
             val distance = if (useDistance && anchorDistance != null) {
                 abs(anchorDistance - input[index].cumulativeDistanceMeters!!)
-            } else if (direction > 0) {
-                val seconds = secondsBetween(anchorTime, input[index].time)
-                if (seconds != null && seconds > 0) {
-                    seconds * medianSpeed
-                } else {
-                    (index - anchor).toDouble() * medianSpacing
-                }
             } else {
-                val seconds = secondsBetween(input[index].time, anchorTime)
-                if (seconds != null && seconds > 0) {
-                    seconds * medianSpeed
+                val source = abs(sourcePrefix[index] - sourcePrefix[anchor])
+                if (source > 0.0) {
+                    source
+                } else if (direction > 0) {
+                    val seconds = secondsBetween(anchorTime, input[index].time)
+                    if (seconds != null && seconds > 0) {
+                        seconds * medianSpeed
+                    } else {
+                        (index - anchor).toDouble() * medianSpacing
+                    }
                 } else {
-                    (anchor - index).toDouble() * medianSpacing
+                    val seconds = secondsBetween(input[index].time, anchorTime)
+                    if (seconds != null && seconds > 0) {
+                        seconds * medianSpeed
+                    } else {
+                        (anchor - index).toDouble() * medianSpacing
+                    }
                 }
             }
             targetS = if (direction > 0) projection.s + distance else projection.s - distance
@@ -820,13 +841,19 @@ class TrackFixer(
         endTime: Instant?,
         useDistance: Boolean,
         startDistance: Double?,
-        endDistance: Double?
+        endDistance: Double?,
+        sourcePrefix: DoubleArray
     ): Double {
         val pointDistance = input[index].cumulativeDistanceMeters
         if (useDistance && startDistance != null && endDistance != null && pointDistance != null) {
             val total = endDistance - startDistance
             val current = pointDistance - startDistance
             if (total > 0.0) return (current / total).coerceIn(0.0, 1.0)
+        }
+        val sourceTotal = sourcePrefix[right] - sourcePrefix[left]
+        if (sourceTotal >= 10.0) {
+            val sourceCurrent = sourcePrefix[index] - sourcePrefix[left]
+            return (sourceCurrent / sourceTotal).coerceIn(0.0, 1.0)
         }
         val pointTime = input[index].time
         if (startTime != null && endTime != null && pointTime != null) {

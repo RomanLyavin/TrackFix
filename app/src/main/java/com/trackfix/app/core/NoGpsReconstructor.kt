@@ -40,6 +40,39 @@ object NoGpsReconstructor {
         if (movingSeconds <= 0.0) throw GpxException("track has no moving intervals")
         val averageSpeed = path.totalLength / movingSeconds
 
+        // Distribute the reference length in proportion to the distance the
+        // recorder actually travelled, not uniformly over time. A cumulative
+        // distance field is the most accurate source; speed is the fallback.
+        val fallbackSpeed = SourceDistance.medianSpeed(input)
+            ?.takeIf { it > 0.0 } ?: 1.0
+        val intervalMeters = SourceDistance.intervalMeters(input, fallbackSpeed)
+        val movingWeights = DoubleArray(input.size)
+        var totalWeight = 0.0
+        for (index in 1 until input.size) {
+            val seconds = secondsBetween(input[index - 1].time, input[index].time)
+                ?: continue
+            if (seconds <= 0.0) continue
+            val moving = !(isPause(input[index - 1]) && isPause(input[index]))
+            if (!moving) continue
+            val weight = intervalMeters[index].takeIf { it > 0.0 }
+                ?: (seconds * fallbackSpeed)
+            movingWeights[index] = weight
+            totalWeight += weight
+        }
+        if (totalWeight <= 0.0) {
+            // No usable speed or distance data: fall back to moving time.
+            for (index in 1 until input.size) {
+                val seconds = secondsBetween(input[index - 1].time, input[index].time)
+                    ?: continue
+                if (seconds <= 0.0) continue
+                if (isPause(input[index - 1]) && isPause(input[index])) continue
+                movingWeights[index] = seconds
+                totalWeight += seconds
+            }
+        }
+        if (totalWeight <= 0.0) throw GpxException("track has no moving intervals")
+        val metersPerWeight = path.totalLength / totalWeight
+
         val n = input.size
         val lat = arrayOfNulls<Double>(n)
         val lon = arrayOfNulls<Double>(n)
@@ -57,7 +90,8 @@ object NoGpsReconstructor {
             val moving = !(isPause(input[index - 1]) && isPause(input[index]))
             val previousS = s
             if (moving && seconds != null && seconds > 0.0) {
-                s = (s + averageSpeed * seconds).coerceAtMost(path.totalLength)
+                s = (s + movingWeights[index] * metersPerWeight)
+                    .coerceAtMost(path.totalLength)
             }
             if (moving && seconds != null) {
                 addGapPoints(
