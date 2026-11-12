@@ -126,6 +126,16 @@ class GitHubUpdateTest {
     }
 
     @Test
+    fun usesRomanLyavinRepository() {
+        assertEquals("https://github.com/RomanLyavin/TrackFix", GitHubUpdate.REPO_URL)
+        assertTrue(
+            GitHubUpdate.API_URL.startsWith(
+                "https://api.github.com/repos/RomanLyavin/TrackFix/"
+            )
+        )
+    }
+
+    @Test
     fun comparesNumericVersionParts() {
         assertTrue(GitHubUpdate.isNewer("1.8.0", "1.7.1"))
         assertTrue(GitHubUpdate.isNewer("v1.10.0", "1.9.9"))

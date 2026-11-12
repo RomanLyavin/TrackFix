@@ -21,13 +21,13 @@ data class GitHubRelease(
 )
 
 /**
- * Reads the latest release from the TrackFix GitHub repository and downloads
- * its APK. A read-only token is optional: it lets the app read releases even
- * when the repository is not visible to anonymous clients.
+ * Reads the latest release from the public TrackFix GitHub repository and
+ * downloads its APK. No token is needed: the repository is public.
  */
 object GitHubUpdate {
+    const val REPO_URL = "https://github.com/RomanLyavin/TrackFix"
     const val API_URL =
-        "https://api.github.com/repos/welltory20231-sys/TrackFix/releases/latest"
+        "https://api.github.com/repos/RomanLyavin/TrackFix/releases/latest"
 
     private const val MAX_APK_BYTES = 80L * 1024L * 1024L
     private const val CONNECT_TIMEOUT_MS = 15_000
@@ -98,25 +98,16 @@ object GitHubUpdate {
         return 0
     }
 
-    fun fetchLatest(currentVersion: String, token: String = ""): GitHubRelease =
-        withTokenFallback(token) { effectiveToken ->
-            fetchLatestOnce(currentVersion, effectiveToken)
-        }
-
-    private fun fetchLatestOnce(
-        currentVersion: String,
-        token: String
-    ): GitHubRelease {
+    fun fetchLatest(currentVersion: String): GitHubRelease {
         val connection = openConnection(
             API_URL,
             currentVersion,
-            token,
             "application/vnd.github+json"
         )
         try {
             val code = connection.responseCode
             if (code != HttpURLConnection.HTTP_OK) {
-                throw HttpStatusException(code, "GitHub HTTP $code")
+                throw IOException("GitHub HTTP $code")
             }
             val json = connection.inputStream.bufferedReader().use { it.readText() }
             return parseLatestRelease(json)
@@ -131,25 +122,6 @@ object GitHubUpdate {
         target: File,
         expectedSize: Long,
         currentVersion: String,
-        token: String = "",
-        onProgress: (Int) -> Unit
-    ): File = withTokenFallback(token) { effectiveToken ->
-        downloadApkOnce(
-            url,
-            target,
-            expectedSize,
-            currentVersion,
-            effectiveToken,
-            onProgress
-        )
-    }
-
-    private fun downloadApkOnce(
-        url: String,
-        target: File,
-        expectedSize: Long,
-        currentVersion: String,
-        token: String,
         onProgress: (Int) -> Unit
     ): File {
         if (!url.startsWith("https://", ignoreCase = true)) {
@@ -158,13 +130,12 @@ object GitHubUpdate {
         val connection = openConnection(
             url,
             currentVersion,
-            token,
             "application/octet-stream"
         )
         try {
             val code = connection.responseCode
             if (code != HttpURLConnection.HTTP_OK) {
-                throw HttpStatusException(code, "APK HTTP $code")
+                throw IOException("APK HTTP $code")
             }
             val total = connection.contentLengthLong.takeIf { it > 0L }
                 ?: expectedSize
@@ -215,7 +186,6 @@ object GitHubUpdate {
     private fun openConnection(
         url: String,
         currentVersion: String,
-        token: String,
         accept: String
     ): HttpURLConnection {
         val connection = URL(url).openConnection() as HttpURLConnection
@@ -225,28 +195,6 @@ object GitHubUpdate {
         connection.setRequestProperty("Accept", accept)
         connection.setRequestProperty("User-Agent", "TrackFix/$currentVersion")
         connection.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-        if (token.isNotBlank()) {
-            connection.setRequestProperty("Authorization", "Bearer $token")
-        }
         return connection
     }
-
-    private inline fun <T> withTokenFallback(token: String, block: (String) -> T): T {
-        return try {
-            block(token)
-        } catch (e: HttpStatusException) {
-            if (token.isNotBlank() && e.code in RETRY_WITHOUT_TOKEN) {
-                block("")
-            } else {
-                throw e
-            }
-        }
-    }
-
-    private class HttpStatusException(
-        val code: Int,
-        message: String
-    ) : IOException(message)
-
-    private val RETRY_WITHOUT_TOKEN = setOf(401, 403, 404)
 }

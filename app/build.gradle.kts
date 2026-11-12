@@ -11,13 +11,6 @@ if (keystorePropertiesFile.exists()) {
     keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
 }
 
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.inputStream().use { localProperties.load(it) }
-}
-val githubToken = localProperties.getProperty("github.token", "").trim()
-
 android {
     namespace = "com.trackfix.app"
     compileSdk = 35
@@ -26,18 +19,9 @@ android {
         applicationId = "com.trackfix.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "1.7.1"
+        versionCode = 12
+        versionName = "1.7.2"
         resourceConfigurations += listOf("ru")
-        buildConfigField(
-            "String",
-            "GITHUB_TOKEN",
-            "\"${githubToken.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-        )
-    }
-
-    buildFeatures {
-        buildConfig = true
     }
 
     signingConfigs {

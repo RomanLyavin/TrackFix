@@ -123,15 +123,18 @@
     <string name="about_button">О программе</string>
     <string name="support_button">Поддержать</string>
     <string name="about_title">О программе</string>
-    <string name="about_version">TrackFix 1.7.1</string>
+    <string name="about_version">TrackFix 1.7.2</string>
     <string name="about_developer">Разработчик: Лявин Роман</string>
     <string name="about_telegram">TG чат лучшего бегового клуба KR</string>
     <string name="about_telegram_prefix">TG чат лучшего бегового</string>
     <string name="about_telegram_suffix">клуба KR</string>
-    <string name="about_update">Обновить</string>
+    <string name="about_update">TG программы</string>
     <string name="about_update_hint">Свежие версии TrackFix в Telegram-канале</string>
-    <string name="about_check_updates">Проверить обновления</string>
-    <string name="about_check_updates_hint">Проверить новую версию на GitHub</string>
+    <string name="about_check_updates">Обновления</string>
+    <string name="about_check_updates_hint">Проверить обновление или открыть страницу на GitHub</string>
+    <string name="updates_choice_message">Проверить новую версию или открыть страницу программы на GitHub?</string>
+    <string name="updates_check">Проверить</string>
+    <string name="updates_open_github">GitHub</string>
     <string name="update_checking">Проверка обновлений…</string>
     <string name="update_checking_hint">Запрашиваю последний релиз на GitHub.</string>
     <string name="update_available_title">Доступна новая версия</string>
@@ -168,7 +171,7 @@
     <string name="error_open_link">Не удалось открыть ссылку.</string>
 
     <string name="privacy_note">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылкам поддержки, телеграм-чата и канала обновлений.</string>
-    <string name="version_note">TrackFix 1.7.1 · Проверка и установка обновлений с GitHub</string>
+    <string name="version_note">TrackFix 1.7.2 · Проверка и установка обновлений с GitHub</string>
 
     <plurals name="points_count">
         <item quantity="one">%1$d точка</item>

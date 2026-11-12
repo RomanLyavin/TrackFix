@@ -908,7 +908,7 @@ class MainActivity : AppCompatActivity() {
             openTelegramChannel()
         }
         view.findViewById<View>(R.id.rowAboutCheckUpdates).setOnClickListener {
-            checkForUpdates()
+            showUpdatesMenu()
         }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.about_title)
@@ -958,6 +958,10 @@ class MainActivity : AppCompatActivity() {
         openExternalLink(UPDATE_URL, "Telegram update channel")
     }
 
+    private fun openGitHubPage() {
+        openExternalLink(GitHubUpdate.REPO_URL, "GitHub repository")
+    }
+
     private fun openExternalLink(url: String, label: String) {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -965,6 +969,16 @@ class MainActivity : AppCompatActivity() {
             Log.e(TAG, "Cannot open $label link", e)
             Toast.makeText(this, R.string.error_open_link, Toast.LENGTH_LONG).show()
         }
+    }
+
+    private fun showUpdatesMenu() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.about_check_updates)
+            .setMessage(R.string.updates_choice_message)
+            .setPositiveButton(R.string.updates_check) { _, _ -> checkForUpdates() }
+            .setNeutralButton(R.string.updates_open_github) { _, _ -> openGitHubPage() }
+            .setNegativeButton(R.string.close, null)
+            .show()
     }
 
     private fun checkForUpdates() {
@@ -981,10 +995,7 @@ class MainActivity : AppCompatActivity() {
         val currentVersion = currentVersionName()
         updateExecutor.execute {
             try {
-                val release = GitHubUpdate.fetchLatest(
-                    currentVersion,
-                    BuildConfig.GITHUB_TOKEN
-                )
+                val release = GitHubUpdate.fetchLatest(currentVersion)
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     dismissUpdateDialog()
@@ -1060,8 +1071,7 @@ class MainActivity : AppCompatActivity() {
                     apkUrl,
                     target,
                     release.apkSize,
-                    currentVersion,
-                    BuildConfig.GITHUB_TOKEN
+                    currentVersion
                 ) { percent ->
                     runOnUiThread {
                         if (!isFinishing && !isDestroyed) updateProgress(percent)
