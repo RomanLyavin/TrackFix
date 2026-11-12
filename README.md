@@ -37,6 +37,25 @@ adb install -r TrackFix-1.7.2.apk
 
 Либо скопируйте APK на телефон и откройте его, разрешив установку из неизвестных источников.
 
+## Все версии
+
+Полная история изменений — в [CHANGELOG.md](CHANGELOG.md). В каждом релизе есть подписанный APK и подробное описание:
+
+| Версия | Изменения | APK |
+| --- | --- | --- |
+| 1.0 | Первая версия: исправление GPS-координат GPX по эталону | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.0/TrackFix-1.0.apk) |
+| 1.1 | Поддержка FIT на входе | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.1/TrackFix-1.1.apk) |
+| 1.2 | Режим «Сложить»: объединение треков GPX и FIT | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.2/TrackFix-1.2.apk) |
+| 1.2.1 | Исправления объединения и сводки | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.2.1/TrackFix-1.2.1.apk) |
+| 1.3.0 | Режим «Фото»: статистика тренировки на фотографии | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.3.0/TrackFix-1.3.0.apk) |
+| 1.3.1 | Исправлено чтение фотографии из галереи | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.3.1/TrackFix-1.3.1.apk) |
+| 1.4.0 | Тип тренировки: бег, вело или свой текст | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.4.0/TrackFix-1.4.0.apk) |
+| 1.5.0 | Восстановление трека без GPS по эталону | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.5.0/TrackFix-1.5.0.apk) |
+| 1.6.0 | Промежуточные точки в длинных пропусках, логотип Kuban Runners | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.6.0/TrackFix-1.6.0.apk) |
+| 1.7.0 | Распределение дистанции по движению, крупные показатели на фото | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.7.0/TrackFix-1.7.0.apk) |
+| 1.7.1 | Проверка и установка обновлений из приложения | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.7.1/TrackFix-1.7.1.apk) |
+| 1.7.2 | Перенос обновлений на RomanLyavin, новые названия строк и выбор GitHub | [APK](https://github.com/RomanLyavin/TrackFix/releases/download/v1.7.2/TrackFix-1.7.2.apk) |
+
 ## Как пользоваться
 
 ### Режим «Исправление»
