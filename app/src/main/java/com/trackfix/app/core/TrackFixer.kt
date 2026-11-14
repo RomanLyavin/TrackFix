@@ -8,6 +8,13 @@ import kotlin.math.min
 
 private const val FROZEN_MAX_MOVE_METERS = 0.5
 private const val FROZEN_MIN_SENSOR_DISTANCE_METERS = 20.0
+private const val TRANSITION_DISTANCE_WEIGHT = 1.0
+private const val CANDIDATE_DISTANCE_WEIGHT = 2.0
+private const val PHASE_TOLERANCE_METERS = 120.0
+private const val PHASE_WEIGHT = 0.1
+private const val FIRST_POINT_SEARCH_RADIUS_METERS = 600.0
+private const val DISTANCE_ALIGNMENT_CAP_METERS = 50.0
+private const val DISTANCE_ALIGNMENT_PHASE_STEPS = 200
 
 data class FixSettings(
     val maxDeviationMeters: Double = 30.0,
@@ -74,6 +81,41 @@ private data class PathChoice(
     val start: Projection,
     val end: Projection
 )
+
+/**
+ * Continuous position of every source point along the reference. The raw
+ * nearest projection is ambiguous when the reference passes the same place
+ * more than once (a loop, several laps, or a self-crossing). The alignment
+ * below follows the source distance and continuity instead, so a point is
+ * assigned to the correct lap even when another lap is geometrically closer.
+ */
+private data class ProgressAlignment(
+    val s: Array<Double?>,
+    val pathIndex: IntArray,
+    val direction: Int,
+    val scale: Double
+)
+
+private data class DirectionAlignment(
+    val progress: DoubleArray,
+    val direction: Int,
+    val cost: Double
+)
+
+/**
+ * Global linear alignment between the recorder's travelled distance and the
+ * reference. It is deliberately simple: one phase and one scale for the whole
+ * track. That is enough to keep every point on the correct branch of a loop,
+ * while local candidate projection can still refine the position.
+ */
+private data class DistanceAlignment(
+    val phase: Double,
+    val scale: Double,
+    val firstDistance: Double
+) {
+    fun progressAt(sourceDistance: Double): Double =
+        phase + (sourceDistance - firstDistance) * scale
+}
 
 class TrackFixer(
     private val reference: ReferencePath,
@@ -142,6 +184,14 @@ class TrackFixer(
         val sourceFallbackSpeed = SourceDistance.medianSpeed(input)
             ?.takeIf { it > 0.0 } ?: medianSpeed
         val sourcePrefix = SourceDistance.prefixMeters(input, sourceFallbackSpeed)
+        val distanceAlignment = if (reference.paths.size == 1) {
+            computeDistanceAlignment(input, valid, sourcePrefix, reference.paths[0])
+        } else {
+            null
+        }
+        val progressAlignment = computeProgress(
+            input, valid, sourcePrefix, medianSpeed, threshold
+        )
 
         val suspicious = BooleanArray(n)
         for (i in 1 until n) {
@@ -157,7 +207,15 @@ class TrackFixer(
             }
             val speed = distance / seconds
             if (speed > speedLimit) {
-                markFartherEndpoint(i - 1, i, deviation, suspicious)
+                // A huge spike cannot be real movement. Mark both ends so a
+                // stale coordinate cannot survive just because it happens to
+                // lie on a different part of the route.
+                if (speed > 50.0) {
+                    suspicious[i - 1] = true
+                    suspicious[i] = true
+                } else {
+                    markFartherEndpoint(i - 1, i, deviation, suspicious)
+                }
             }
         }
 
@@ -175,6 +233,44 @@ class TrackFixer(
             // on the reference. Only repair it when the coordinate is also far
             // away, otherwise clean tracks get nudged by a few metres.
             if (suspicious[i] && far[i]) bad[i] = true
+        }
+        // A point can lie a few centimetres from a parallel branch of a
+        // self-overlapping reference while the travelled distance shows that
+        // it belongs to another branch. Such a point is not "far" in metres,
+        // but keeping it would tear the track apart. Real detours farther than
+        // the deviation threshold are deliberately left alone.
+        val sourceLength = sourcePrefix.last() - sourcePrefix.first()
+        val sourceToReferenceRatio = if (reference.paths[0].totalLength > 1.0) {
+            sourceLength / reference.paths[0].totalLength
+        } else {
+            0.0
+        }
+        // The distance alignment is only meaningful when the recording covers
+        // roughly the same route length as the reference. A clean track that
+        // deliberately covers just a part of the reference (or several times
+        // its length) would otherwise have every point flagged as a branch
+        // mismatch and rewritten.
+        if (distanceAlignment != null &&
+            reference.paths[0].closed &&
+            reference.paths[0].repeatLapCount <= 2 &&
+            sourceToReferenceRatio in 0.8..1.2
+        ) {
+            val path = reference.paths[0]
+            for (i in 0 until n) {
+                if (!valid[i] || missing[i]) continue
+                val projection = nearest[i] ?: continue
+                val predicted = distanceAlignment.progressAt(sourcePrefix[i])
+                var difference = abs(predicted - projection.s)
+                if (path.closed) {
+                    difference %= path.totalLength
+                    if (difference > path.totalLength * 0.5) {
+                        difference = path.totalLength - difference
+                    }
+                }
+                if (difference > max(threshold, 50.0) && deviation[i] <= threshold) {
+                    bad[i] = true
+                }
+            }
         }
         for (range in frozenRanges) {
             for (index in range) bad[index] = true
@@ -272,17 +368,20 @@ class TrackFixer(
             val repaired = when {
                 left != null && right != null -> repairBetween(
                     block, left, right, expected, input, lat, lon, ele,
-                    coordinateChanged, elevationFilled, threshold, sourcePrefix
+                    coordinateChanged, elevationFilled, threshold, sourcePrefix,
+                    distanceAlignment, progressAlignment
                 )
                 left != null -> repairOneSide(
                     block, left, 1, input, lat, lon, ele,
                     coordinateChanged, elevationFilled, medianSpeed, medianSpacing,
-                    threshold, clampEdges, sourcePrefix
+                    threshold, clampEdges, sourcePrefix, distanceAlignment,
+                    progressAlignment, frozenFlag
                 )
                 right != null -> repairOneSide(
                     block, right, -1, input, lat, lon, ele,
                     coordinateChanged, elevationFilled, medianSpeed, medianSpacing,
-                    threshold, clampEdges, sourcePrefix
+                    threshold, clampEdges, sourcePrefix, distanceAlignment,
+                    progressAlignment, frozenFlag
                 )
                 else -> repairWithoutAnchors(
                     block, input, lat, lon, ele, coordinateChanged, elevationFilled, threshold
@@ -374,6 +473,409 @@ class TrackFixer(
             ),
             warnings = warnings
         )
+    }
+
+    /**
+     * Aligns the source points to the reference by dynamic programming.
+     *
+     * A point can have several candidate projections when the reference
+     * crosses itself or contains several laps. The cost combines the geometric
+     * distance to the reference with the difference between the source
+     * distance travelled and the reference distance between consecutive
+     * points. That makes the chosen candidate continuous even when another
+     * branch is a few centimetres closer.
+     */
+    private fun computeProgress(
+        input: List<TrackPoint>,
+        valid: BooleanArray,
+        sourcePrefix: DoubleArray,
+        medianSpeed: Double,
+        threshold: Double
+    ): ProgressAlignment {
+        val empty = ProgressAlignment(
+            s = arrayOfNulls(input.size),
+            pathIndex = IntArray(input.size) { -1 },
+            direction = 1,
+            scale = 1.0
+        )
+        if (reference.paths.size != 1) return empty
+        val path = reference.paths[0]
+        val radius = max(150.0, threshold * 5.0)
+        val candidateLists = arrayOfNulls<List<Projection>>(input.size)
+        val indices = ArrayList<Int>()
+        for (index in input.indices) {
+            if (!valid[index]) continue
+            val lat = input[index].lat ?: continue
+            val lon = input[index].lon ?: continue
+            // The first GPS fix may be far from the route while the source
+            // distance still shows that the recording began at the route
+            // start. A wider search lets the phase prior pick that start
+            // instead of locking onto a nearer parallel branch.
+            val pointRadius = if (indices.isEmpty()) {
+                max(radius, FIRST_POINT_SEARCH_RADIUS_METERS)
+            } else {
+                radius
+            }
+            val candidates = path.candidates(lat, lon, pointRadius)
+            if (candidates.isEmpty()) continue
+            candidateLists[index] = candidates
+            indices.add(index)
+        }
+        if (indices.size < 2) return empty
+
+        val forward = alignDirection(
+            path, indices, candidateLists, input, sourcePrefix, medianSpeed, 1
+        )
+        val backward = alignDirection(
+            path, indices, candidateLists, input, sourcePrefix, medianSpeed, -1
+        )
+        val chosen = when {
+            forward == null -> backward
+            backward == null -> forward
+            forward.cost <= backward.cost -> forward
+            else -> backward
+        } ?: return empty
+
+        val resultS = arrayOfNulls<Double>(input.size)
+        val resultPath = IntArray(input.size) { -1 }
+        for (position in indices.indices) {
+            val index = indices[position]
+            resultS[index] = chosen.progress[position]
+            resultPath[index] = 0
+        }
+        val first = indices.first()
+        val last = indices.last()
+        val sourceSpan = sourcePrefix[last] - sourcePrefix[first]
+        val scale = if (sourceSpan > 1.0) {
+            val progressSpan = if (chosen.direction > 0) {
+                chosen.progress.last() - chosen.progress.first()
+            } else {
+                chosen.progress.first() - chosen.progress.last()
+            }
+            (progressSpan / sourceSpan)
+                .takeIf { it.isFinite() && it > 0.05 }
+                ?: 1.0
+        } else {
+            1.0
+        }
+        return ProgressAlignment(
+            s = resultS,
+            pathIndex = resultPath,
+            direction = chosen.direction,
+            scale = scale.coerceIn(0.25, 4.0)
+        )
+    }
+
+    /**
+     * Finds one phase and one scale that map the recorder's cumulative
+     * distance onto the reference. The cost is capped so a few bad GPS points
+     * cannot pull the whole alignment to a wrong branch.
+     */
+    private fun computeDistanceAlignment(
+        input: List<TrackPoint>,
+        valid: BooleanArray,
+        sourcePrefix: DoubleArray,
+        path: RefPath
+    ): DistanceAlignment? {
+        val indices = ArrayList<Int>()
+        for (index in input.indices) {
+            if (!valid[index]) continue
+            if (input[index].lat == null || input[index].lon == null) continue
+            indices.add(index)
+        }
+        if (indices.size < 10) return null
+        val first = indices.first()
+        val totalSource = sourcePrefix.last() - sourcePrefix.first()
+        if (totalSource < 20.0) return null
+        val baseScale = path.totalLength / totalSource
+        if (!baseScale.isFinite() || baseScale <= 0.0) return null
+        // Keep the total source distance mapped exactly onto the reference
+        // length. Letting the scale drift by several percent makes a repeated
+        // stadium route gain or lose a whole lap over a long recording, even
+        // though every individual point still looks close to the loop.
+        val scales = doubleArrayOf(baseScale)
+        val coarseStep = max(5.0, path.totalLength / DISTANCE_ALIGNMENT_PHASE_STEPS)
+        var bestPhase = 0.0
+        var bestScale = baseScale
+        var bestCost = Double.POSITIVE_INFINITY
+        var phase = 0.0
+        while (phase < path.totalLength) {
+            for (scale in scales) {
+                val cost = distanceAlignmentCost(
+                    path, indices, input, sourcePrefix,
+                    sourcePrefix[first], phase, scale
+                )
+                if (cost < bestCost) {
+                    bestCost = cost
+                    bestPhase = phase
+                    bestScale = scale
+                }
+            }
+            phase += coarseStep
+        }
+        val refineStep = max(1.0, coarseStep / 8.0)
+        var refinedPhase = bestPhase - coarseStep
+        while (refinedPhase <= bestPhase + coarseStep) {
+            val cost = distanceAlignmentCost(
+                path, indices, input, sourcePrefix,
+                sourcePrefix[first], refinedPhase, bestScale
+            )
+            if (cost < bestCost) {
+                bestCost = cost
+                bestPhase = refinedPhase
+            }
+            refinedPhase += refineStep
+        }
+        return DistanceAlignment(
+            phase = bestPhase,
+            scale = bestScale,
+            firstDistance = sourcePrefix[first]
+        )
+    }
+
+    private fun distanceAlignmentCost(
+        path: RefPath,
+        indices: List<Int>,
+        input: List<TrackPoint>,
+        sourcePrefix: DoubleArray,
+        firstDistance: Double,
+        phase: Double,
+        scale: Double
+    ): Double {
+        var cost = 0.0
+        for (index in indices) {
+            val s = phase + (sourcePrefix[index] - firstDistance) * scale
+            val vertex = path.pointAt(s, wrap = path.closed)
+            cost += min(
+                Geo.distanceMeters(
+                    input[index].lat!!, input[index].lon!!,
+                    vertex.lat, vertex.lon
+                ),
+                DISTANCE_ALIGNMENT_CAP_METERS
+            )
+        }
+        return cost
+    }
+
+    /**
+     * Keeps the real GPS projection on the lap selected by the distance
+     * alignment. A stadium reference repeats the same loop many times, so the
+     * nearest projection may be a copy several laps away. Snapping by the
+     * repeat lap preserves the physical position while preventing a jump at
+     * the edge of a repaired block.
+     */
+    private fun snapProjectionToLap(
+        path: RefPath,
+        predicted: Double,
+        actual: Double
+    ): Double {
+        var difference = actual - predicted
+        if (path.repeatLapCount > 1) {
+            val lap = path.repeatLapLength
+            if (lap > 1.0) {
+                difference -= Math.round(difference / lap) * lap
+            }
+        } else if (path.closed && path.totalLength > 1.0) {
+            difference %= path.totalLength
+            if (difference > path.totalLength * 0.5) difference -= path.totalLength
+            if (difference < -path.totalLength * 0.5) difference += path.totalLength
+        }
+        return predicted + difference
+    }
+
+    /**
+     * Selects the reference copy used as a repair anchor. Several copies of a
+     * repeated loop can lie within GPS noise of the same fix, so physical
+     * distance alone cannot tell them apart. Keep the copies that are
+     * physically close to the fix and pick the one whose progress is closest
+     * to the distance alignment. This avoids both a jump to a far-away copy
+     * and a silent reset to an early lap.
+     */
+    private fun chooseAnchorProjection(
+        candidates: List<Projection>,
+        predicted: Double,
+        path: RefPath
+    ): Projection? {
+        if (candidates.isEmpty()) return null
+        val nearest = candidates.minByOrNull { it.distance } ?: return null
+        val physicalTolerance = max(10.0, nearest.distance + 5.0)
+        val nearby = candidates.filter { it.distance <= physicalTolerance }
+        return nearby.minByOrNull { candidate ->
+            var difference = candidate.s - predicted
+            if (path.closed && path.totalLength > 1.0) {
+                difference %= path.totalLength
+                if (difference > path.totalLength * 0.5) difference -= path.totalLength
+                if (difference < -path.totalLength * 0.5) difference += path.totalLength
+            }
+            abs(difference)
+        }
+    }
+
+    private fun alignDirection(
+        path: RefPath,
+        indices: List<Int>,
+        candidateLists: Array<List<Projection>?>,
+        input: List<TrackPoint>,
+        sourcePrefix: DoubleArray,
+        medianSpeed: Double,
+        direction: Int
+    ): DirectionAlignment? {
+        val firstCandidates = candidateLists[indices.first()] ?: return null
+        var best: DirectionAlignment? = null
+        // The first candidate fixes the phase between the source distance and
+        // the reference. Trying every candidate avoids guessing whether the
+        // recording starts at the reference seam or at another point of a loop.
+        for (firstIndex in firstCandidates.indices) {
+            val alignment = alignWithPhase(
+                path, indices, candidateLists, input, sourcePrefix,
+                medianSpeed, direction, firstIndex
+            ) ?: continue
+            if (best == null || alignment.cost < best!!.cost) best = alignment
+        }
+        return best
+    }
+
+    private fun alignWithPhase(
+        path: RefPath,
+        indices: List<Int>,
+        candidateLists: Array<List<Projection>?>,
+        input: List<TrackPoint>,
+        sourcePrefix: DoubleArray,
+        medianSpeed: Double,
+        direction: Int,
+        forcedFirst: Int
+    ): DirectionAlignment? {
+        val firstCandidates = candidateLists[indices.first()] ?: return null
+        if (forcedFirst !in firstCandidates.indices) return null
+        val firstSource = sourcePrefix[indices.first()]
+        val phase = if (direction > 0) {
+            firstCandidates[forcedFirst].s - firstSource
+        } else {
+            firstCandidates[forcedFirst].s + firstSource
+        }
+        var costs = DoubleArray(firstCandidates.size) { Double.POSITIVE_INFINITY }
+        var positions = DoubleArray(firstCandidates.size)
+        costs[forcedFirst] = firstCandidates[forcedFirst].distance * CANDIDATE_DISTANCE_WEIGHT
+        positions[forcedFirst] = firstCandidates[forcedFirst].s
+        val backPointers = ArrayList<IntArray>(indices.size)
+        val positionHistory = ArrayList<DoubleArray>(indices.size)
+        backPointers.add(IntArray(firstCandidates.size) { -1 })
+        positionHistory.add(positions.copyOf())
+
+        for (position in 1 until indices.size) {
+            val previousIndex = indices[position - 1]
+            val currentIndex = indices[position]
+            val previousCandidates = candidateLists[previousIndex] ?: return null
+            val currentCandidates = candidateLists[currentIndex] ?: return null
+            val expectedS = if (direction > 0) {
+                sourcePrefix[currentIndex] + phase
+            } else {
+                phase - sourcePrefix[currentIndex]
+            }
+            val nextCosts = DoubleArray(currentCandidates.size) { Double.POSITIVE_INFINITY }
+            val nextPositions = DoubleArray(currentCandidates.size)
+            val back = IntArray(currentCandidates.size) { -1 }
+            var expected = sourcePrefix[currentIndex] - sourcePrefix[previousIndex]
+            if (expected <= 0.0) {
+                val seconds = secondsBetween(input[previousIndex].time, input[currentIndex].time)
+                if (seconds != null && seconds > 0.0) expected = seconds * medianSpeed
+            }
+            if (expected < 0.0) expected = 0.0
+            for (candidateIndex in currentCandidates.indices) {
+                val candidate = currentCandidates[candidateIndex]
+                val phaseCost = branchPhaseCost(candidate.s, expectedS, path)
+                var bestCost = Double.POSITIVE_INFINITY
+                var bestPosition = 0.0
+                var bestPrevious = -1
+                for (previousCandidateIndex in previousCandidates.indices) {
+                    val previousPosition = positions[previousCandidateIndex]
+                    val delta = if (direction > 0) {
+                        val base = candidate.s - previousPosition
+                        if (path.closed) {
+                            base + Math.round((expected - base) / path.totalLength) *
+                                path.totalLength
+                        } else {
+                            base
+                        }
+                    } else {
+                        val base = previousPosition - candidate.s
+                        if (path.closed) {
+                            base + Math.round((expected - base) / path.totalLength) *
+                                path.totalLength
+                        } else {
+                            base
+                        }
+                    }
+                    if (delta < -1.0) continue
+                    val error = abs(delta - expected)
+                    val total = costs[previousCandidateIndex] +
+                        error * TRANSITION_DISTANCE_WEIGHT +
+                        candidate.distance * CANDIDATE_DISTANCE_WEIGHT +
+                        phaseCost
+                    if (total < bestCost) {
+                        bestCost = total
+                        bestPrevious = previousCandidateIndex
+                        bestPosition = if (direction > 0) {
+                            previousPosition + delta
+                        } else {
+                            previousPosition - delta
+                        }
+                    }
+                }
+                if (bestPrevious >= 0) {
+                    nextCosts[candidateIndex] = bestCost
+                    nextPositions[candidateIndex] = bestPosition
+                    back[candidateIndex] = bestPrevious
+                }
+            }
+            costs = nextCosts
+            positions = nextPositions
+            backPointers.add(back)
+            positionHistory.add(positions.copyOf())
+        }
+
+        var bestCandidate = -1
+        var bestCost = Double.POSITIVE_INFINITY
+        for (candidateIndex in costs.indices) {
+            if (costs[candidateIndex] < bestCost) {
+                bestCost = costs[candidateIndex]
+                bestCandidate = candidateIndex
+            }
+        }
+        if (bestCandidate < 0) return null
+
+        val progress = DoubleArray(indices.size)
+        var candidateIndex = bestCandidate
+        for (position in indices.indices.reversed()) {
+            progress[position] = positionHistory[position][candidateIndex]
+            if (position > 0) {
+                candidateIndex = backPointers[position][candidateIndex]
+                if (candidateIndex < 0) return null
+            }
+        }
+        return DirectionAlignment(progress, direction, bestCost)
+    }
+
+    /**
+     * Weak absolute check: the travelled source distance predicts where on the
+     * reference the point should be. It is tolerant to sensor drift, but a
+     * branch thousands of metres away is heavily penalised. This is what stops
+     * a point from flipping to a parallel part of a self-overlapping route just
+     * because that part happens to be a few centimetres closer.
+     */
+    private fun branchPhaseCost(s: Double, expectedS: Double, path: RefPath): Double {
+        var difference = abs(s - expectedS)
+        if (path.closed) {
+            difference %= path.totalLength
+            if (difference > path.totalLength * 0.5) {
+                difference = path.totalLength - difference
+            }
+        }
+        return if (difference > PHASE_TOLERANCE_METERS) {
+            (difference - PHASE_TOLERANCE_METERS) * PHASE_WEIGHT
+        } else {
+            0.0
+        }
     }
 
     private fun markFartherEndpoint(
@@ -604,8 +1106,107 @@ class TrackFixer(
         coordinateChanged: BooleanArray,
         elevationFilled: BooleanArray,
         threshold: Double,
-        sourcePrefix: DoubleArray
+        sourcePrefix: DoubleArray,
+        distance: DistanceAlignment?,
+        progress: ProgressAlignment
     ): Boolean {
+        val distanceLeftS = distance?.progressAt(sourcePrefix[left])
+        val distanceRightS = distance?.progressAt(sourcePrefix[right])
+        if (distanceLeftS != null && distanceRightS != null) {
+            val path = reference.paths[0]
+            val leftProjection = reference.nearest(
+                lat[left]!!, lon[left]!!, max(100.0, threshold * 2.0)
+            )
+            val rightProjection = reference.nearest(
+                lat[right]!!, lon[right]!!, max(100.0, threshold * 2.0)
+            )
+            val snappedLeftS = if (leftProjection != null) {
+                snapProjectionToLap(path, distanceLeftS, leftProjection.s)
+            } else {
+                distanceLeftS
+            }
+            val snappedRightS = if (rightProjection != null) {
+                snapProjectionToLap(path, distanceRightS, rightProjection.s)
+            } else {
+                distanceRightS
+            }
+            // Prefer the real GPS anchors when they describe a plausible
+            // movement. The distance alignment can be a hundred metres off
+            // after a long recording, and forcing its absolute position would
+            // create a jump at the edge of the repaired block.
+            var actualSpan = if (leftProjection != null && rightProjection != null) {
+                rightProjection.s - leftProjection.s
+            } else {
+                null
+            }
+            if (actualSpan != null && path.closed) {
+                actualSpan %= path.totalLength
+                if (actualSpan > path.totalLength * 0.5) {
+                    actualSpan -= path.totalLength
+                } else if (actualSpan < -path.totalLength * 0.5) {
+                    actualSpan += path.totalLength
+                }
+            }
+            val tolerance = max(150.0, expected * 0.75)
+            val useActual = actualSpan != null &&
+                leftProjection != null &&
+                abs(abs(actualSpan) - expected) <= tolerance
+            val leftS = if (useActual) leftProjection!!.s else snappedLeftS
+            val span = if (useActual) actualSpan!! else snappedRightS - snappedLeftS
+            val plausible = abs(abs(span) - expected) <= tolerance
+            if (plausible) {
+                val startTime = input[left].time
+                val endTime = input[right].time
+                val useDistance = blockSensorDistanceUsable(input, block, left, right)
+                val startDistance = input[left].cumulativeDistanceMeters
+                val endDistance = input[right].cumulativeDistanceMeters
+                for (index in block) {
+                    val fraction = fractionBetween(
+                        index, left, right, input, startTime, endTime,
+                        useDistance, startDistance, endDistance, sourcePrefix
+                    )
+                    val s = leftS + span * fraction
+                    val vertex = path.pointAt(s, wrap = path.closed)
+                    applyVertex(index, vertex, lat, lon, ele, coordinateChanged, elevationFilled)
+                }
+                return true
+            }
+        }
+
+        val progressPathIndex = progress.pathIndex[left]
+        val leftS = progress.s[left]
+        val rightS = progress.s[right]
+        if (progressPathIndex >= 0 &&
+            progressPathIndex == progress.pathIndex[right] &&
+            leftS != null &&
+            rightS != null
+        ) {
+            val span = rightS - leftS
+            val ordered = if (progress.direction > 0) span >= -1.0 else span <= 1.0
+            // The DP already follows the travelled distance. If its span does
+            // not match this block, the alignment is not trustworthy here and
+            // the old local candidate search is used instead.
+            val plausible = abs(abs(span) - expected) <= max(150.0, expected * 0.75)
+            if (ordered && plausible) {
+                val path = reference.paths[progressPathIndex]
+                val startTime = input[left].time
+                val endTime = input[right].time
+                val useDistance = blockSensorDistanceUsable(input, block, left, right)
+                val startDistance = input[left].cumulativeDistanceMeters
+                val endDistance = input[right].cumulativeDistanceMeters
+                for (index in block) {
+                    val fraction = fractionBetween(
+                        index, left, right, input, startTime, endTime,
+                        useDistance, startDistance, endDistance, sourcePrefix
+                    )
+                    val s = leftS + span * fraction
+                    val vertex = path.pointAt(s, wrap = path.closed)
+                    applyVertex(index, vertex, lat, lon, ele, coordinateChanged, elevationFilled)
+                }
+                return true
+            }
+        }
+
         val leftCandidates = reference.nearestCandidates(
             lat[left]!!, lon[left]!!,
             max(100.0, threshold * 2.0),
@@ -696,7 +1297,10 @@ class TrackFixer(
         medianSpacing: Double,
         threshold: Double,
         clampEdges: Boolean,
-        sourcePrefix: DoubleArray
+        sourcePrefix: DoubleArray,
+        distanceAlignment: DistanceAlignment?,
+        progress: ProgressAlignment,
+        frozen: BooleanArray
     ): Boolean {
         val edgeBlock = block.first == 0 || block.last == input.size - 1
         val searchRadius = if (edgeBlock) {
@@ -707,22 +1311,90 @@ class TrackFixer(
         val candidates = reference.nearestCandidates(
             lat[anchor]!!, lon[anchor]!!,
             searchRadius,
-            maxCandidates = 8
+            maxCandidates = 50
         )
         if (candidates.isEmpty()) return false
-        val projection = candidates.minByOrNull { it.distance } ?: return false
-        val path = reference.paths[projection.pathIndex]
+        val distanceAnchorS = distanceAlignment?.progressAt(sourcePrefix[anchor])
+        // At the very start or end of an open reference the global distance
+        // alignment can be shifted by a length mismatch and would invent
+        // positions before the route start. Keep the local anchor projection
+        // there, as the source distance is still reliable next to the anchor.
+        val useDistanceAlignment = distanceAnchorS != null &&
+            !(edgeBlock && !reference.paths[0].closed)
+        // A stadium reference repeats the same physical loop many times, so
+        // several copies can be within a couple of metres of one GPS fix. The
+        // nearest copy may belong to an earlier lap. Choose the copy closest
+        // to the distance-aligned progress among the physically close ones;
+        // this keeps the join continuous and the lap count correct.
+        val projection = if (useDistanceAlignment) {
+            chooseAnchorProjection(candidates, distanceAnchorS!!, reference.paths[0])
+        } else {
+            candidates.minByOrNull { it.distance }
+        } ?: return false
+        val progressPathIndex = progress.pathIndex[anchor]
+        val progressAnchorS = progress.s[anchor]
+        val useProgress = !useDistanceAlignment &&
+            progressPathIndex >= 0 &&
+            progressAnchorS != null
+        val path = when {
+            useDistanceAlignment -> reference.paths[0]
+            useProgress -> reference.paths[progressPathIndex]
+            else -> reference.paths[projection.pathIndex]
+        }
+        val anchorS = when {
+            useDistanceAlignment -> projection.s
+            useProgress -> progressAnchorS!!
+            else -> projection.s
+        }
+        val moveSign = if (useProgress) progress.direction * direction else direction
+        val scale = when {
+            useDistanceAlignment -> distanceAlignment!!.scale
+            useProgress -> localProgressScale(
+                progress, input, sourcePrefix, anchor, direction, path
+            )
+            else -> 1.0
+        }
         val anchorTime = input[anchor].time
         val anchorDistance = input[anchor].cumulativeDistanceMeters
         val useDistance = oneSideSensorDistanceUsable(input, block, anchor, direction)
+        // A leading or trailing GPS gap should begin/end at the activity's
+        // start line, not wherever the accumulated source distance happens to
+        // drift. This also makes a closed route finish exactly one reference
+        // length after its start instead of stopping in the middle of a lap.
+        val edgeCandidateS = if (useDistanceAlignment && path.closed) {
+            when {
+                block.first == 0 && direction < 0 -> 0.0
+                block.last == input.size - 1 && direction > 0 -> path.totalLength
+                else -> null
+            }
+        } else {
+            null
+        }
+        // Never pull an edge block backwards just to hit the seam: only use
+        // the edge target when it lies in the direction of travel.
+        val edgeTargetS = if (edgeCandidateS != null &&
+            (edgeCandidateS - anchorS) * direction > 0.0
+        ) {
+            edgeCandidateS
+        } else {
+            null
+        }
+        val edgeEndIndex = when {
+            edgeTargetS == null -> -1
+            block.first == 0 && direction < 0 -> block.first
+            else -> block.last
+        }
+        val edgeSourceSpan = if (edgeEndIndex >= 0) {
+            abs(sourcePrefix[edgeEndIndex] - sourcePrefix[anchor])
+        } else {
+            0.0
+        }
         // Only accept a tiny overshoot for a non-frozen edge block. Larger
         // extrapolation would invent a route beyond the reference.
         val edgeTolerance = 1.0
         var repairedAny = false
 
         for (index in block) {
-            val vertex: RefVertex
-            var targetS: Double
             val distance = if (useDistance && anchorDistance != null) {
                 abs(anchorDistance - input[index].cumulativeDistanceMeters!!)
             } else {
@@ -745,7 +1417,42 @@ class TrackFixer(
                     }
                 }
             }
-            targetS = if (direction > 0) projection.s + distance else projection.s - distance
+            var targetS = if (edgeTargetS != null && edgeSourceSpan > 1.0) {
+                val fraction = (
+                    abs(sourcePrefix[index] - sourcePrefix[anchor]) / edgeSourceSpan
+                ).coerceIn(0.0, 1.0)
+                anchorS + (edgeTargetS - anchorS) * fraction
+            } else if (useDistanceAlignment) {
+                val ownS = distanceAlignment!!.progressAt(sourcePrefix[index])
+                if (abs(ownS - anchorS) < 0.5 && distance > 1.0) {
+                    anchorS + direction * distance * scale
+                } else {
+                    ownS
+                }
+            } else {
+                anchorS + moveSign * distance * scale
+            }
+            if (!useDistanceAlignment && useProgress) {
+                val ownS = progress.s[index]
+                val ownPathIndex = progress.pathIndex[index]
+                val followsDirection = ownS != null && if (moveSign > 0) {
+                    ownS >= anchorS - 1.0
+                } else {
+                    ownS <= anchorS + 1.0
+                }
+                // A frozen run repeats one coordinate while the recorder still
+                // reports movement, so its own projection would pile every
+                // point onto one spot. Spread it with the travelled distance
+                // instead. The same applies to points without coordinates.
+                val ownProjectionUsable = ownS != null &&
+                    ownPathIndex == progressPathIndex &&
+                    !frozen[index] &&
+                    followsDirection &&
+                    abs(ownS - anchorS) <= distance * 4.5 + 300.0
+                if (ownProjectionUsable) {
+                    targetS = ownS
+                }
+            }
             // Do not invent coordinates far beyond an open reference. A block
             // that touches the start/end of the whole track may be clamped to
             // that edge when the overshoot is small (rounding, GPS noise) or
@@ -768,11 +1475,49 @@ class TrackFixer(
                     }
                 }
             }
-            vertex = path.pointAt(targetS, wrap = path.closed)
+            val vertex = path.pointAt(targetS, wrap = path.closed)
             applyVertex(index, vertex, lat, lon, ele, coordinateChanged, elevationFilled)
             repairedAny = true
         }
         return repairedAny
+    }
+
+    /**
+     * Estimates how many metres of reference progress correspond to one metre
+     * of source distance close to the anchor. The global ratio can be skewed by
+     * a long frozen section, while the neighbouring good points describe the
+     * local scale of the current lap.
+     */
+    private fun localProgressScale(
+        progress: ProgressAlignment,
+        input: List<TrackPoint>,
+        sourcePrefix: DoubleArray,
+        anchor: Int,
+        direction: Int,
+        path: RefPath
+    ): Double {
+        val anchorS = progress.s[anchor] ?: return progress.scale
+        val anchorPathIndex = progress.pathIndex[anchor]
+        val step = -direction
+        var index = anchor + step
+        var checked = 0
+        while (index in input.indices && checked < 20) {
+            val s = progress.s[index]
+            if (s != null && progress.pathIndex[index] == anchorPathIndex) {
+                val source = abs(sourcePrefix[anchor] - sourcePrefix[index])
+                var span = abs(anchorS - s)
+                if (path.closed) {
+                    span %= path.totalLength
+                    if (span > path.totalLength * 0.5) span = path.totalLength - span
+                }
+                if (source >= 5.0 && span >= 1.0) {
+                    return (span / source).coerceIn(0.25, 4.0)
+                }
+            }
+            index += step
+            checked++
+        }
+        return progress.scale
     }
 
     private fun repairWithoutAnchors(

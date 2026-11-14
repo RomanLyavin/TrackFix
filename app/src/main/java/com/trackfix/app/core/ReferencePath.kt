@@ -26,6 +26,14 @@ class RefPath internal constructor(rawVertices: List<RefVertex>) {
     val cumulative: DoubleArray
     val totalLength: Double
     val closed: Boolean
+    /**
+     * Length of the first short loop when the reference repeats it. A stadium
+     * reference contains many identical laps, so a projection that differs by
+     * a whole lap is still the same physical place and must not be treated as
+     * a branch error.
+     */
+    val repeatLapLength: Double
+    val repeatLapCount: Int
     private val grid: SegmentGrid
 
     init {
@@ -48,13 +56,42 @@ class RefPath internal constructor(rawVertices: List<RefVertex>) {
             cumulative[i] = total
         }
         totalLength = total
-        closed = vertices.size > 2 &&
+        // A recorded loop often has a small gap between its first and last
+        // point (GPS drift). Treat it as closed when the gap is small relative
+        // to the route, otherwise a trailing repair cannot wrap around and the
+        // last part of the track stays unresolved.
+        val endpointGap = if (vertices.size > 2) {
             Geo.distanceMeters(
                 vertices.first().lat,
                 vertices.first().lon,
                 vertices.last().lat,
                 vertices.last().lon
-            ) <= 30.0 && totalLength > 200.0
+            )
+        } else {
+            Double.POSITIVE_INFINITY
+        }
+        val closeTolerance = max(30.0, min(75.0, totalLength * 0.01))
+        closed = vertices.size > 2 && totalLength > 200.0 && endpointGap <= closeTolerance
+        var lapLength = 0.0
+        if (vertices.size > 20) {
+            for (i in 20 until vertices.size) {
+                if (cumulative[i] > 200.0 &&
+                    Geo.distanceMeters(
+                        vertices.first().lat, vertices.first().lon,
+                        vertices[i].lat, vertices[i].lon
+                    ) <= 30.0
+                ) {
+                    lapLength = cumulative[i]
+                    break
+                }
+            }
+        }
+        repeatLapLength = if (lapLength > 50.0) lapLength else totalLength
+        repeatLapCount = if (lapLength > 50.0) {
+            max(1, Math.round(totalLength / lapLength).toInt())
+        } else {
+            1
+        }
         grid = SegmentGrid(vertices)
     }
 

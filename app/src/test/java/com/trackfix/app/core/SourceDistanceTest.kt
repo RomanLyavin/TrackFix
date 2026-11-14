@@ -39,6 +39,20 @@ class SourceDistanceTest {
     }
 
     @Test
+    fun impossibleDistanceJumpFallsBackToSpeed() {
+        val points = listOf(
+            point(0, speed = 2.0, distance = 0.0),
+            point(1, speed = 2.0, distance = 400.0),
+            point(2, speed = 2.0, distance = 420.0)
+        )
+
+        val intervals = SourceDistance.intervalMeters(points, fallbackSpeed = 1.0)
+
+        assertEquals(20.0, intervals[1], 1e-9)
+        assertEquals(20.0, intervals[2], 1e-9)
+    }
+
+    @Test
     fun speedIsUsedWhenDistanceIsMissing() {
         val points = listOf(
             point(0, speed = 2.0),

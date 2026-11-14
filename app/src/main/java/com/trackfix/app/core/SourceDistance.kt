@@ -22,6 +22,15 @@ import java.time.Instant
 object SourceDistance {
     private const val MAX_INTERVAL_METERS = 5000.0
 
+    /**
+     * A cumulative-distance field or a speed field can contain a bad spike at
+     * the very start of a recording. Neither must be trusted as travelled
+     * distance: on the 10 November track the first two seconds claimed 180 m
+     * (90 m/s), which pushed the leading repair more than 200 m away from the
+     * start line. 35 m/s is above any realistic running or cycling speed.
+     */
+    private const val MAX_PLAUSIBLE_SPEED = 35.0
+
     fun medianSpeed(points: List<TrackPoint>): Double? {
         val speeds = points.mapNotNull { validSpeed(it.speedMetersPerSecond) }.sorted()
         if (speeds.isEmpty()) return null
@@ -57,7 +66,10 @@ object SourceDistance {
             val endDistance = points[index].cumulativeDistanceMeters
             if (startDistance != null && endDistance != null) {
                 val delta = endDistance - startDistance
-                if (delta >= 0.0 && delta <= MAX_INTERVAL_METERS) {
+                if (delta >= 0.0 &&
+                    delta <= MAX_INTERVAL_METERS &&
+                    delta <= intervalSeconds * MAX_PLAUSIBLE_SPEED
+                ) {
                     raw[index] = delta
                     hasRaw[index] = true
                     continue
@@ -72,7 +84,7 @@ object SourceDistance {
                 endSpeed != null -> endSpeed
                 else -> null
             }
-            if (speed != null) {
+            if (speed != null && speed <= MAX_PLAUSIBLE_SPEED) {
                 raw[index] = speed * intervalSeconds
                 hasRaw[index] = true
             }

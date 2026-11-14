@@ -171,7 +171,7 @@
     <string name="error_open_link">Не удалось открыть ссылку.</string>
 
     <string name="privacy_note">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылкам поддержки, телеграм-чата и канала обновлений.</string>
-    <string name="version_note">TrackFix 1.7.2 · Проверка и установка обновлений с GitHub</string>
+    <string name="version_note">TrackFix 1.7.3 · Плавный ремонт треков с повторяющимися кругами</string>
 
     <plurals name="points_count">
         <item quantity="one">%1$d точка</item>
