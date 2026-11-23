@@ -525,32 +525,52 @@ class TrackFixer(
         var missingPlaced = 0
         var unresolved = 0
 
-        // Positions along the reference that the continuous alignment already
-        // resolved. Points without a candidate projection (a glitch that sits
-        // far away from the route) are filled by walking the source distance
-        // forward or backward from the nearest resolved neighbour. That keeps
-        // repeated laps intact, unlike a single global scale which would
-        // compress two laps of a short loop into one.
+        // Where the point belongs along the reference. The reference can pass
+        // the same place many times (repeated laps, a self-crossing), so the
+        // plain nearest projection is ambiguous and jumps by whole laps.
+        // When the recording covers roughly the same length as the reference,
+        // the global distance alignment is used: it is continuous by
+        // construction, and the physically close copy of the reference that
+        // lies nearest to that prediction is selected. Otherwise the per-point
+        // candidate alignment is used and gaps are chained along the source
+        // distance, which keeps several laps of a short loop intact.
+        val singlePath = reference.paths.size == 1
+        val totalSource = sourcePrefix.last() - sourcePrefix.first()
+        val ratio = if (singlePath && reference.paths[0].totalLength > 1.0) {
+            totalSource / reference.paths[0].totalLength
+        } else {
+            0.0
+        }
+        val globalFirst = distanceAlignment != null && singlePath && ratio in 0.8..1.2
+
         val s = arrayOfNulls<Double>(n)
         val pathOf = IntArray(n) { -1 }
-        for (index in 0 until n) {
-            val aligned = progress.s[index]
-            if (aligned != null) {
-                s[index] = aligned
-                pathOf[index] = progress.pathIndex[index].coerceIn(0, reference.paths.size - 1)
+        if (globalFirst) {
+            val path = reference.paths[0]
+            for (index in 0 until n) {
+                s[index] = distanceAlignment!!.progressAt(sourcePrefix[index])
+                pathOf[index] = 0
             }
-        }
-        if (s.any { it != null }) {
-            val step = progress.scale * (if (progress.direction < 0) -1.0 else 1.0)
-            for (index in 1 until n) {
-                if (s[index] != null || s[index - 1] == null) continue
-                s[index] = s[index - 1]!! + (sourcePrefix[index] - sourcePrefix[index - 1]) * step
-                pathOf[index] = pathOf[index - 1]
+        } else {
+            for (index in 0 until n) {
+                val aligned = progress.s[index]
+                if (aligned != null) {
+                    s[index] = aligned
+                    pathOf[index] = progress.pathIndex[index].coerceIn(0, reference.paths.size - 1)
+                }
             }
-            for (index in n - 2 downTo 0) {
-                if (s[index] != null || s[index + 1] == null) continue
-                s[index] = s[index + 1]!! - (sourcePrefix[index + 1] - sourcePrefix[index]) * step
-                pathOf[index] = pathOf[index + 1]
+            if (s.any { it != null }) {
+                val step = progress.scale * (if (progress.direction < 0) -1.0 else 1.0)
+                for (index in 1 until n) {
+                    if (s[index] != null || s[index - 1] == null) continue
+                    s[index] = s[index - 1]!! + (sourcePrefix[index] - sourcePrefix[index - 1]) * step
+                    pathOf[index] = pathOf[index - 1]
+                }
+                for (index in n - 2 downTo 0) {
+                    if (s[index] != null || s[index + 1] == null) continue
+                    s[index] = s[index + 1]!! - (sourcePrefix[index + 1] - sourcePrefix[index]) * step
+                    pathOf[index] = pathOf[index + 1]
+                }
             }
         }
 

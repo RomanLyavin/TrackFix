@@ -19,8 +19,8 @@ android {
         applicationId = "com.trackfix.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 16
-        versionName = "1.7.6"
+        versionCode = 17
+        versionName = "1.7.7"
         resourceConfigurations += listOf("ru")
     }
 

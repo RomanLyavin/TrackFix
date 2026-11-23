@@ -21,8 +21,8 @@
     <string name="deviation_title">Допустимое отклонение от эталона</string>
     <string name="deviation_value">%1$d м</string>
     <string name="deviation_hint">Точки, которые отклонились от эталона сильнее, считаются проблемными. Меньше значение — строже исправление.</string>
-    <string name="follow_reference">Маршрут восстановлен по эталону</string>
-    <string name="fill_elevation">Заполнять отсутствующую высоту из эталона</string>
+    <string name="follow_reference">Положите таке трек из эталона</string>
+    <string name="fill_elevation">Заполнять высоту из эталона</string>
     <string name="fix_button">Исправить маршрут</string>
     <string name="processing">Обработка…</string>
     <string name="result_title">Готово</string>

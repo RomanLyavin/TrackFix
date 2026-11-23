@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import java.time.Duration
 
 /**
  * Regression checks for the two real recordings that exposed branch flips on
@@ -156,5 +157,50 @@ class RealTrackRegressionTest {
         assertTrue("end is $seam m from the start", seam < 40.0)
         assertNotNull(output.points[2558].lat)
         assertNotNull(output.points[2558].lon)
+    }
+
+    private fun fixFollow(source: String, referenceName: String, threshold: Double): GpxFile {
+        val result = FixEngine.process(
+            originalBytes = resource(source),
+            originalName = source,
+            referenceBytes = resource(referenceName),
+            settings = FixSettings(threshold, fillMissingElevation = true, followReference = true)
+        )
+        return GpxCodec.parse(result.outputBytes)
+    }
+
+    /**
+     * The 22.11.2026 recording covers the same route length as its reference
+     * (9787 m against 9699 m) while the reference passes the same places
+     * repeatedly. Selecting the nearest copy per point flipped onto another
+     * copy and produced a 74 m step around 40:53. The overlay must stay
+     * continuous along the reference instead.
+     */
+    @Test
+    fun november22FollowReferenceHasNoJumpOnTheLastLap() {
+        val output = fixFollow("err2211_source.fit", "err2211_reference.gpx", 20.0)
+        val ref = reference("err2211_reference.gpx")
+
+        var maxDeviation = 0.0
+        for (point in output.points) {
+            if (point.lat == null || point.lon == null) continue
+            val projection = ref.nearest(point.lat!!, point.lon!!, 500.0)
+            if (projection != null) maxDeviation = maxOf(maxDeviation, projection.distance)
+        }
+        assertTrue("max deviation from reference: $maxDeviation m", maxDeviation < 1.0)
+
+        val start = output.points.first().time!!
+        for (index in 1 until output.points.size) {
+            val a = output.points[index - 1]
+            val b = output.points[index]
+            if (a.lat == null || a.lon == null || b.lat == null || b.lon == null) continue
+            val seconds = Duration.between(start, b.time).toSeconds().toDouble()
+            if (seconds < 2445.0 || seconds > 2456.0) continue
+            val step = Geo.distanceMeters(a.lat!!, a.lon!!, b.lat!!, b.lon!!)
+            assertTrue("step ${step}m at ${seconds}s", step < 10.0)
+        }
+
+        val worst = maxStep(output)
+        assertTrue("worst step ${worst}m", worst < 45.0)
     }
 }

@@ -340,6 +340,15 @@
                         android:textAppearance="@style/TextAppearance.TrackFix.Small" />
 
                     <com.google.android.material.checkbox.MaterialCheckBox
+                        android:id="@+id/cbFollowReference"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="@string/follow_reference"
+                        android:textAppearance="@style/TextAppearance.TrackFix.Body"
+                        android:textColor="@color/text_primary" />
+
+                    <com.google.android.material.checkbox.MaterialCheckBox
                         android:id="@+id/cbFillElevation"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
@@ -363,13 +372,6 @@
                 app:icon="@drawable/ic_check_circle"
                 app:iconGravity="textStart"
                 app:iconTint="@color/white" />
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbFollowReference"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/follow_reference"
-                android:textAppearance="@style/TextAppearance.TrackFix.Body" />
 
         </LinearLayout>
 
