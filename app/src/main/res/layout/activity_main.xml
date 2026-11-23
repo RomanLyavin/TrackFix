@@ -291,7 +291,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/settings_title"
+                        
                         android:textAppearance="@style/TextAppearance.TrackFix.CardTitle" />
 
                     <LinearLayout
@@ -363,6 +363,14 @@
                 app:icon="@drawable/ic_check_circle"
                 app:iconGravity="textStart"
                 app:iconTint="@color/white" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbOverlayOnReference"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/overlay_on_reference"
+                android:textAppearance="@style/TextAppearance.TrackFix.Body" />
         </LinearLayout>
 
         <!-- Merge mode -->
@@ -464,6 +472,14 @@
                 app:icon="@drawable/ic_check_circle"
                 app:iconGravity="textStart"
                 app:iconTint="@color/white" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbOverlayOnReference"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/overlay_on_reference"
+                android:textAppearance="@style/TextAppearance.TrackFix.Body" />
         </LinearLayout>
 
         <!-- Photo mode -->

@@ -18,7 +18,8 @@ private const val DISTANCE_ALIGNMENT_PHASE_STEPS = 200
 
 data class FixSettings(
     val maxDeviationMeters: Double = 30.0,
-    val fillMissingElevation: Boolean = true
+    val fillMissingElevation: Boolean = true,
+    val overlayOnReference: Boolean = false
 )
 
 enum class FixWarning {
@@ -276,11 +277,19 @@ class TrackFixer(
             for (index in range) bad[index] = true
         }
 
-        // A run of points outside the reference is a glitch only when there is
-        // a speed spike at its edge. A smooth excursion that later rejoins the
-        // route can be a real detour and must not be flattened onto the
-        // reference. A track that simply continues beyond the end of the
-        // reference must not be "corrected" either.
+        // A contiguous run that strays beyond the allowed deviation is GPS
+        // noise (an unstable signal) and is repaired as a whole, with or
+        // without a speed spike: only part of it being repaired would leave a
+        // jump at the run edge, and a smooth offset of tens of metres is not
+        // a lane shift that should be preserved. The allowed-deviation setting
+        // is what separates tolerated offsets from noise: a small offset
+        // within the tolerance stays, anything beyond it follows the
+        // reference. A track that simply continues beyond the end of an open
+        // reference (its projections pinned to the endpoint) must not be
+        // "corrected" — only a spiked run there is a glitch.
+        val endpointMargin = 15.0
+        val singlePath = reference.paths.size == 1
+        val path0 = reference.paths.getOrNull(0)
         val farRunSize = IntArray(n)
         var i = 0
         while (i < n) {

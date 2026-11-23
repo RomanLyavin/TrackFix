@@ -566,7 +566,8 @@ class MainActivity : AppCompatActivity() {
 
         val settings = FixSettings(
             maxDeviationMeters = sliderDeviation.value.toDouble(),
-            fillMissingElevation = cbFillElevation.isChecked
+            fillMissingElevation = cbFillElevation.isChecked,
+            overlayOnReference = cbOverlayOnReference.isChecked
         )
         executor.execute {
             try {
