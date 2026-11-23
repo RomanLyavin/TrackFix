@@ -6,6 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.time.Duration
+import java.io.File
 
 /**
  * Regression checks for the two real recordings that exposed branch flips on
@@ -202,5 +203,18 @@ class RealTrackRegressionTest {
 
         val worst = maxStep(output)
         assertTrue("worst step ${worst}m", worst < 45.0)
+    }
+
+    @Test
+    fun writesNovember22FollowGpx() {
+        val result = FixEngine.process(
+            originalBytes = resource("err2211_source.fit"),
+            originalName = "i213267505.fit",
+            referenceBytes = resource("err2211_reference.gpx"),
+            settings = FixSettings(20.0, fillMissingElevation = true, followReference = true)
+        )
+        val dir = File("build/test-output")
+        dir.mkdirs()
+        File(dir, "err2211-follow-1.7.7.gpx").writeBytes(result.outputBytes)
     }
 }
