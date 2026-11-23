@@ -70,12 +70,7 @@ object FixEngine {
         val points = original.trackPoints()
         val hasAnyCoordinate = points.any { it.hasCoordinates }
         val result = if (hasAnyCoordinate) {
-            if (settings.overlayOnReference) {
-                // Overlay mode: use reference coordinates with source sensors
-                overlayOnReference(points, reference, settings)
-            } else {
-                TrackFixer(reference, settings).fix(points)
-            }
+            TrackFixer(reference, settings).fix(points)
         } else {
             // A recording without a single GPS fix cannot be repaired by
             // matching points to the reference. Rebuild the whole route from
@@ -104,129 +99,6 @@ object FixEngine {
 
     internal fun parseTrackFile(bytes: ByteArray, sourceName: String? = null): GpxFile {
         return parseTrack(bytes, reference = false, sourceName = sourceName)
-    }
-
-    /**
-     * Overlay mode: use the reference route with the original sensors.
-     * The coordinates are from the reference, the distance/speed/time
-     * data is from the original file. This is for when the original GPS
-     * signal was unstable but the sensor data (distance, speed, time)
-     * is reliable.
-     */
-    private fun overlayOnReference(
-        points: List<TrackPoint>,
-        reference: ReferencePath,
-        settings: FixSettings
-    ): FixResult {
-        // Use a simple distance-based alignment to map the original sensor
-        // data onto the reference route. The reference is assumed to be
-        // the correct path; only coordinates are changed, all other values
-        // (time, speed, distance) are preserved from the original.
-        val n = points.size
-        val lat = Array<Double?>(n) { points[it].lat }
-        val lon = Array<Double?>(n) { points[it].lon }
-        val ele = Array<Double?>(n) { points[it].ele }
-        val coordinateChanged = BooleanArray(n)
-        val elevationFilled = BooleanArray(n)
-        val warnings = mutableSetOf<FixWarning>()
-        val stats = FixStats(
-            totalPoints = n,
-            fixedCoordinates = 0,
-            missingCoordinates = 0,
-            filledElevations = 0,
-            problemBlocks = 0,
-            unresolvedPoints = 0,
-            maxDeviationBefore = 0.0,
-            maxDeviationCapped = false,
-            maxJumpBefore = 0.0,
-            distanceBefore = 0.0,
-            distanceAfter = 0.0,
-            speedLimit = settings.maxDeviationMeters.coerceIn(1.0, 500.0),
-            frozenRuns = 0,
-            frozenCoordinates = 0,
-            leadingFixed = 0,
-            trailingFixed = 0,
-            reconstructedCoordinates = 0,
-            insertedPoints = 0
-        )
-        
-        // Compute distance from the start of the original track
-        val sourcePrefix = SourceDistance.prefixMeters(points, 3.0)
-        val totalSource = sourcePrefix.last() - sourcePrefix.first()
-        if (totalSource < 1.0) return FixResult(
-            lat = lat,
-            lon = lon,
-            ele = ele,
-            coordinateChanged = coordinateChanged,
-            elevationFilled = elevationFilled,
-            stats = stats,
-            warnings = warnings
-        )
-        
-        // Align the reference to match the source distance
-        val path = reference.paths[0]
-        val scale = path.totalLength / totalSource
-        val baseScale = scale.coerceIn(0.25, 4.0)
-        var phase = 0.0
-        
-        // Find the best phase that aligns the track to the reference
-        val coarseStep = max(5.0, path.totalLength / 200.0)
-        var bestCost = Double.POSITIVE_INFINITY
-        var bestPhase = 0.0
-        var step = 0.0
-        while (step < path.totalLength) {
-            val cost = distanceAlignmentCost(
-                path, points, sourcePrefix, step, baseScale
-            )
-            if (cost < bestCost) {
-                bestCost = cost
-                bestPhase = step
-            }
-            step += coarseStep
-        }
-        phase = bestPhase
-        
-        // Apply the alignment and map each point to its position on the reference
-        for (i in points.indices) {
-            val s = phase + (sourcePrefix[i] - sourcePrefix.first()) * baseScale
-            val vertex = path.pointAt(s, wrap = path.closed)
-            if (vertex.lat.isFinite() && vertex.lon.isFinite()) {
-                lat[i] = vertex.lat
-                lon[i] = vertex.lon
-                coordinateChanged[i] = true
-            }
-        }
-        
-        return FixResult(
-            lat = lat,
-            lon = lon,
-            ele = ele,
-            coordinateChanged = coordinateChanged,
-            elevationFilled = elevationFilled,
-            stats = stats.copy(distanceAfter = path.totalLength),
-            warnings = warnings
-        )
-    }
-
-    private fun distanceAlignmentCost(
-        path: RefPath,
-        points: List<TrackPoint>,
-        sourcePrefix: DoubleArray,
-        phase: Double,
-        scale: Double
-    ): Double {
-        var cost = 0.0
-        val firstDistance = sourcePrefix.first()
-        for (index in points.indices) {
-            val s = phase + (sourcePrefix[index] - firstDistance) * scale
-            val vertex = path.pointAt(s, wrap = path.closed)
-            val distance = Geo.distanceMeters(
-                points[index].lat!!, points[index].lon!!,
-                vertex.lat, vertex.lon
-            )
-            cost += min(distance, 50.0) // Cap the cost to avoid outliers
-        }
-        return cost
     }
 
     /**

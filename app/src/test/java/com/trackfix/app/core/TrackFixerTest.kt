@@ -5,6 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import kotlin.math.abs
 
 class TrackFixerTest {
 
@@ -369,5 +370,62 @@ class TrackFixerTest {
         val result = TrackFixer(reference(), FixSettings(30.0, fillMissingElevation = true)).fix(input)
         assertEquals(originalElevation, result.ele[50])
         assertTrue(!result.elevationFilled[50])
+    }
+
+    @Test
+    fun followReferenceTakesEveryCoordinateFromTheReference() {
+        val input = track()
+        for (index in 20..70) {
+            input[index] = input[index].copy(lon = input[index].lon!! + 0.01)
+        }
+        val result = TrackFixer(
+            reference(),
+            FixSettings(30.0, fillMissingElevation = false, followReference = true)
+        ).fix(input)
+
+        assertEquals(101, result.stats.fixedCoordinates)
+        for (index in input.indices) {
+            val expected = startLat + index * latStep
+            assertTrue("point $index lat", abs(result.lat[index]!! - expected) < 1e-6)
+            assertTrue("point $index lon", abs(result.lon[index]!! - startLon) < 1e-9)
+        }
+    }
+
+    @Test
+    fun followReferenceKeepsElevationOfTheSource() {
+        val input = track()
+        for (index in 20..70) {
+            input[index] = input[index].copy(lon = input[index].lon!! + 0.01)
+        }
+        val result = TrackFixer(
+            reference(),
+            FixSettings(30.0, fillMissingElevation = false, followReference = true)
+        ).fix(input)
+
+        assertEquals(input.size, result.lat.size)
+        assertEquals(0, result.stats.filledElevations)
+        for (index in input.indices) {
+            assertEquals("elevation $index", input[index].ele, result.ele[index])
+        }
+    }
+
+    @Test
+    fun followReferenceStaysOnTheCorrectLapOfARepeatedLoop() {
+        val input = loopTrack()
+        for (index in 20..70) {
+            input[index] = input[index].copy(lon = input[index].lon!! + 0.01)
+        }
+        val result = TrackFixer(
+            loopReference(),
+            FixSettings(30.0, fillMissingElevation = false, followReference = true)
+        ).fix(input)
+
+        for (index in input.indices) {
+            val (lat, lon) = loopPoint(index)
+            assertTrue(
+                "point $index landed on the wrong lap",
+                Geo.distanceMeters(result.lat[index]!!, result.lon[index]!!, lat, lon) < 1.0
+            )
+        }
     }
 }

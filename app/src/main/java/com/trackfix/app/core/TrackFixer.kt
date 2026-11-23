@@ -19,7 +19,14 @@ private const val DISTANCE_ALIGNMENT_PHASE_STEPS = 200
 data class FixSettings(
     val maxDeviationMeters: Double = 30.0,
     val fillMissingElevation: Boolean = true,
-    val overlayOnReference: Boolean = false
+    /**
+     * "Follow the reference": every coordinate is taken from the reference
+     * route, while time, elevation and all sensor values stay as in the source
+     * file. The position along the reference comes from the same alignment the
+     * regular repair uses, so repeated laps and self-crossings stay on the
+     * correct branch.
+     */
+    val followReference: Boolean = false
 )
 
 enum class FixWarning {
@@ -194,6 +201,14 @@ class TrackFixer(
             input, valid, sourcePrefix, medianSpeed, threshold
         )
 
+        if (settings.followReference) {
+            return followReference(
+                input, valid, lat, lon, ele, coordinateChanged, elevationFilled,
+                warnings, progressAlignment, distanceAlignment, nearest, deviation,
+                sourcePrefix, threshold, distanceBefore, maxJumpBefore, speedLimit
+            )
+        }
+
         val suspicious = BooleanArray(n)
         for (i in 1 until n) {
             if (!valid[i - 1] || !valid[i]) continue
@@ -277,19 +292,11 @@ class TrackFixer(
             for (index in range) bad[index] = true
         }
 
-        // A contiguous run that strays beyond the allowed deviation is GPS
-        // noise (an unstable signal) and is repaired as a whole, with or
-        // without a speed spike: only part of it being repaired would leave a
-        // jump at the run edge, and a smooth offset of tens of metres is not
-        // a lane shift that should be preserved. The allowed-deviation setting
-        // is what separates tolerated offsets from noise: a small offset
-        // within the tolerance stays, anything beyond it follows the
-        // reference. A track that simply continues beyond the end of an open
-        // reference (its projections pinned to the endpoint) must not be
-        // "corrected" — only a spiked run there is a glitch.
-        val endpointMargin = 15.0
-        val singlePath = reference.paths.size == 1
-        val path0 = reference.paths.getOrNull(0)
+        // A run of points outside the reference is a glitch only when there is
+        // a speed spike at its edge. A smooth excursion that later rejoins the
+        // route can be a real detour and must not be flattened onto the
+        // reference. A track that simply continues beyond the end of the
+        // reference must not be "corrected" either.
         val farRunSize = IntArray(n)
         var i = 0
         while (i < n) {
@@ -479,6 +486,135 @@ class TrackFixer(
                 frozenCoordinates = frozenRanges.sumOf { it.last - it.first + 1 },
                 leadingFixed = leadingFixed,
                 trailingFixed = trailingFixed
+            ),
+            warnings = warnings
+        )
+    }
+
+    /**
+     * "Follow the reference" mode. The coordinate of every point is taken from
+     * the reference route; time, elevation and all sensor values stay exactly
+     * as they are in the source file.
+     *
+     * The position along the reference is not the plain nearest projection:
+     * that would jump between branches of a self-crossing route or between
+     * repeated laps. The same alignment the regular repair uses is applied
+     * instead, so the overlay stays continuous and on the correct lap.
+     */
+    private fun followReference(
+        input: List<TrackPoint>,
+        valid: BooleanArray,
+        lat: Array<Double?>,
+        lon: Array<Double?>,
+        ele: Array<Double?>,
+        coordinateChanged: BooleanArray,
+        elevationFilled: BooleanArray,
+        warnings: MutableSet<FixWarning>,
+        progress: ProgressAlignment,
+        distanceAlignment: DistanceAlignment?,
+        nearest: Array<Projection?>,
+        deviation: DoubleArray,
+        sourcePrefix: DoubleArray,
+        threshold: Double,
+        distanceBefore: Double,
+        maxJumpBefore: Double,
+        speedLimit: Double
+    ): FixResult {
+        val n = input.size
+        var changed = 0
+        var missingPlaced = 0
+        var unresolved = 0
+
+        // Positions along the reference that the continuous alignment already
+        // resolved. Points without a candidate projection (a glitch that sits
+        // far away from the route) are filled by walking the source distance
+        // forward or backward from the nearest resolved neighbour. That keeps
+        // repeated laps intact, unlike a single global scale which would
+        // compress two laps of a short loop into one.
+        val s = arrayOfNulls<Double>(n)
+        val pathOf = IntArray(n) { -1 }
+        for (index in 0 until n) {
+            val aligned = progress.s[index]
+            if (aligned != null) {
+                s[index] = aligned
+                pathOf[index] = progress.pathIndex[index].coerceIn(0, reference.paths.size - 1)
+            }
+        }
+        if (s.any { it != null }) {
+            val step = progress.scale * (if (progress.direction < 0) -1.0 else 1.0)
+            for (index in 1 until n) {
+                if (s[index] != null || s[index - 1] == null) continue
+                s[index] = s[index - 1]!! + (sourcePrefix[index] - sourcePrefix[index - 1]) * step
+                pathOf[index] = pathOf[index - 1]
+            }
+            for (index in n - 2 downTo 0) {
+                if (s[index] != null || s[index + 1] == null) continue
+                s[index] = s[index + 1]!! - (sourcePrefix[index + 1] - sourcePrefix[index]) * step
+                pathOf[index] = pathOf[index + 1]
+            }
+        }
+
+        for (index in 0 until n) {
+            var position = s[index]
+            var pathIndex = pathOf[index]
+            if (position == null && distanceAlignment != null) {
+                position = distanceAlignment.progressAt(sourcePrefix[index])
+                pathIndex = 0
+            }
+            if (position == null) {
+                val projection = nearest[index] ?: continue
+                position = projection.s
+                pathIndex = projection.pathIndex
+            }
+            if (pathIndex < 0) {
+                unresolved++
+                continue
+            }
+            val path = reference.paths[pathIndex]
+            val vertex = path.pointAt(position, wrap = path.closed)
+            if (!Geo.isValidCoordinate(vertex.lat, vertex.lon)) {
+                unresolved++
+                continue
+            }
+            if (!valid[index]) missingPlaced++
+            lat[index] = vertex.lat
+            lon[index] = vertex.lon
+            coordinateChanged[index] = true
+            changed++
+            if (settings.fillMissingElevation && ele[index] == null && vertex.ele != null) {
+                ele[index] = vertex.ele
+                elevationFilled[index] = true
+            }
+        }
+
+        val filledElevations = elevationFilled.count { it }
+        val maxDeviationBefore = deviation.filter { it.isFinite() }.maxOrNull() ?: 0.0
+        val maxDeviationCapped = deviation.any { !it.isFinite() }
+
+        if (changed > n / 2 && n > 0) warnings.add(FixWarning.LARGE_CHANGES)
+        if (unresolved > 0) warnings.add(FixWarning.NO_REFERENCE_COVERAGE)
+        if (reference.paths.size > 1) warnings.add(FixWarning.REFERENCE_SEGMENTS)
+
+        return FixResult(
+            lat = lat,
+            lon = lon,
+            ele = ele,
+            coordinateChanged = coordinateChanged,
+            elevationFilled = elevationFilled,
+            stats = FixStats(
+                totalPoints = n,
+                fixedCoordinates = changed,
+                missingCoordinates = missingPlaced,
+                filledElevations = filledElevations,
+                problemBlocks = 0,
+                unresolvedPoints = unresolved,
+                maxDeviationBefore = maxDeviationBefore,
+                maxDeviationCapped = maxDeviationCapped,
+                maxJumpBefore = maxJumpBefore,
+                distanceBefore = distanceBefore,
+                distanceAfter = distanceOf(lat, lon),
+                speedLimit = speedLimit,
+                reconstructedCoordinates = changed
             ),
             warnings = warnings
         )

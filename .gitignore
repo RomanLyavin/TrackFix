@@ -15,3 +15,5 @@ Files/
 TrackFix-*.apk
 AGENTS.md
 app/src/test/resources/
+hs_err_pid*.log
+replay_pid*.log

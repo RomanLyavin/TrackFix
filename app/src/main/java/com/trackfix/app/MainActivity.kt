@@ -101,6 +101,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sliderDeviation: Slider
     private lateinit var tvDeviationValue: TextView
     private lateinit var cbFillElevation: MaterialCheckBox
+    private lateinit var cbFollowReference: MaterialCheckBox
+    private lateinit var tvVersionNote: TextView
     private lateinit var mergeFileList: LinearLayout
     private lateinit var tvMergeEmpty: TextView
     private lateinit var tvMergeSummary: TextView
@@ -176,6 +178,9 @@ class MainActivity : AppCompatActivity() {
         sliderDeviation = findViewById(R.id.sliderDeviation)
         tvDeviationValue = findViewById(R.id.tvDeviationValue)
         cbFillElevation = findViewById(R.id.cbFillElevation)
+        cbFollowReference = findViewById(R.id.cbFollowReference)
+        tvVersionNote = findViewById(R.id.tvVersionNote)
+        tvVersionNote.text = getString(R.string.version_note, currentVersionName())
         mergeFileList = findViewById(R.id.mergeFileList)
         tvMergeEmpty = findViewById(R.id.tvMergeEmpty)
         tvMergeSummary = findViewById(R.id.tvMergeSummary)
@@ -201,6 +206,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateDeviationLabel(sliderDeviation.value)
         cbFillElevation.setOnCheckedChangeListener { _, _ -> clearResult() }
+        cbFollowReference.setOnCheckedChangeListener { _, _ -> clearResult() }
 
         modeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
@@ -249,6 +255,7 @@ class MainActivity : AppCompatActivity() {
             val deviation = savedInstanceState.getFloat(KEY_DEVIATION, 30f)
             sliderDeviation.value = deviation.coerceIn(10f, 100f)
             cbFillElevation.isChecked = savedInstanceState.getBoolean(KEY_FILL_ELEVATION, true)
+            cbFollowReference.isChecked = savedInstanceState.getBoolean(KEY_FOLLOW_REFERENCE, false)
             mode = savedInstanceState.getInt(KEY_MODE, Mode.FIX.ordinal).let { ordinal ->
                 Mode.values().getOrNull(ordinal) ?: Mode.FIX
             }
@@ -281,6 +288,7 @@ class MainActivity : AppCompatActivity() {
         outState.putInt(KEY_MODE, mode.ordinal)
         outState.putFloat(KEY_DEVIATION, sliderDeviation.value)
         outState.putBoolean(KEY_FILL_ELEVATION, cbFillElevation.isChecked)
+        outState.putBoolean(KEY_FOLLOW_REFERENCE, cbFollowReference.isChecked)
         originalSelection?.let { outState.putString(KEY_ORIGINAL_URI, it.uri.toString()) }
         referenceSelection?.let { outState.putString(KEY_REFERENCE_URI, it.uri.toString()) }
         outState.putStringArrayList(
@@ -567,7 +575,7 @@ class MainActivity : AppCompatActivity() {
         val settings = FixSettings(
             maxDeviationMeters = sliderDeviation.value.toDouble(),
             fillMissingElevation = cbFillElevation.isChecked,
-            overlayOnReference = cbOverlayOnReference.isChecked
+            followReference = cbFollowReference.isChecked
         )
         executor.execute {
             try {
@@ -902,6 +910,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun showAbout() {
         val view = layoutInflater.inflate(R.layout.dialog_about, null)
+        view.findViewById<TextView>(R.id.tvAboutVersion).text =
+            getString(R.string.about_version, currentVersionName())
         val telegram = view.findViewById<TextView>(R.id.tvAboutTelegram)
         telegram.text = telegramLinkText(telegram.textSize)
         telegram.setOnClickListener { openTelegram() }
@@ -1296,6 +1306,7 @@ class MainActivity : AppCompatActivity() {
         private const val KEY_MODE = "mode"
         private const val KEY_DEVIATION = "deviation"
         private const val KEY_FILL_ELEVATION = "fill_elevation"
+        private const val KEY_FOLLOW_REFERENCE = "follow_reference"
         private const val KEY_ORIGINAL_URI = "original_uri"
         private const val KEY_REFERENCE_URI = "reference_uri"
         private const val KEY_MERGE_URIS = "merge_uris"
