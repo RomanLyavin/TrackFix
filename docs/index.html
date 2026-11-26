@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TrackFix Web — исправление GPS-треков, объединение GPX и FIT, наложение данных тренировки на фото. Все вычисления выполняются в браузере.">
+  <title>TrackFix Web</title>
+  <link rel="icon" href="assets/kr_logo.jpg" type="image/jpeg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#top" aria-label="TrackFix Web — наверх">
+        <img src="assets/kr_logo.jpg" alt="" class="brand-logo">
+        <span class="brand-text">
+          <strong>TrackFix <span data-version></span></strong>
+          <small>GPS, объединение и фото — без загрузки файлов на сервер</small>
+        </span>
+      </a>
+      <nav class="header-actions" aria-label="Дополнительно">
+        <button type="button" class="btn btn-ghost" data-open="support">Поддержать</button>
+        <button type="button" class="btn btn-ghost" data-open="about">О программе</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top" class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Работает прямо в браузере</p>
+        <h1>Исправляйте треки, объединяйте записи и собирайте карточки тренировок</h1>
+        <p class="lead">Выберите файлы GPX или FIT. Данные не отправляются никуда: вся обработка выполняется локально на вашем устройстве.</p>
+      </div>
+      <div class="hero-card" aria-hidden="true">
+        <span class="hero-dot"></span>
+        <span class="hero-line hero-line-1"></span>
+        <span class="hero-line hero-line-2"></span>
+        <span class="hero-line hero-line-3"></span>
+        <strong>GPX · FIT</strong>
+      </div>
+    </section>
+
+    <section class="workbench" aria-label="Инструменты TrackFix">
+      <div class="tabs" role="tablist" aria-label="Режимы работы">
+        <button type="button" class="tab is-active" id="tab-fix" role="tab" aria-selected="true" aria-controls="panel-fix" data-panel="fix">
+          <span class="tab-number">1</span> Исправление трека
+        </button>
+        <button type="button" class="tab" id="tab-merge" role="tab" aria-selected="false" aria-controls="panel-merge" data-panel="merge">
+          <span class="tab-number">2</span> Объединить треки
+        </button>
+        <button type="button" class="tab" id="tab-photo" role="tab" aria-selected="false" aria-controls="panel-photo" data-panel="photo">
+          <span class="tab-number">3</span> Данные на фото
+        </button>
+      </div>
+
+      <!-- FIX -->
+      <section class="panel is-active" id="panel-fix" role="tabpanel" aria-labelledby="tab-fix">
+        <div class="panel-head">
+          <div>
+            <h2>Исправление трека</h2>
+            <p>Восстановите GPS по эталонному маршруту. Время, точки и показатели датчиков сохраняются.</p>
+          </div>
+          <span class="badge">GPX / FIT → GPX</span>
+        </div>
+
+        <div class="grid-two">
+          <label class="file-drop" id="drop-original">
+            <input type="file" id="original-file" accept=".gpx,.fit,application/gpx+xml,application/octet-stream">
+            <span class="file-icon">01</span>
+            <strong>Исходный трек</strong>
+            <span class="file-name" id="original-name">Файл не выбран</span>
+            <small>GPX или FIT с координатами и датчиками</small>
+          </label>
+          <label class="file-drop" id="drop-reference">
+            <input type="file" id="reference-file" accept=".gpx,.fit,application/gpx+xml,application/octet-stream">
+            <span class="file-icon">02</span>
+            <strong>Эталонный маршрут</strong>
+            <span class="file-name" id="reference-name">Файл не выбран</span>
+            <small>Корректный GPX или FIT той же трассы</small>
+          </label>
+        </div>
+
+        <div class="settings-row">
+          <label class="control">
+            <span>Допустимое отклонение от эталона, м</span>
+            <input type="number" id="deviation" min="1" max="500" step="1" value="30">
+          </label>
+          <label class="check">
+            <input type="checkbox" id="fill-elevation" checked>
+            <span>Заполнять отсутствующую высоту из эталона</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="follow-reference">
+            <span>Полностью брать трек из эталона</span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="fix-run">Исправить маршрут</button>
+          <button type="button" class="btn btn-outline" id="fix-download" disabled>Сохранить GPX</button>
+        </div>
+        <div class="result" id="fix-result" hidden></div>
+      </section>
+
+      <!-- MERGE -->
+      <section class="panel" id="panel-merge" role="tabpanel" aria-labelledby="tab-merge" hidden>
+        <div class="panel-head">
+          <div>
+            <h2>Объединить треки</h2>
+            <p>Добавьте два или больше трека GPX или FIT. Приложение само определит порядок по времени начала.</p>
+          </div>
+          <span class="badge">GPX + FIT → GPX</span>
+        </div>
+
+        <label class="file-drop file-drop-wide" id="drop-merge">
+          <input type="file" id="merge-files" accept=".gpx,.fit,application/gpx+xml,application/octet-stream" multiple>
+          <span class="file-icon">03</span>
+          <strong>Добавьте два или больше трека</strong>
+          <span class="file-name" id="merge-names">Файлы не выбраны</span>
+          <small>Повторные по времени точки из следующих файлов обрезаются</small>
+        </label>
+        <ul class="file-list" id="merge-list"></ul>
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="merge-run">Объединить треки</button>
+          <button type="button" class="btn btn-outline" id="merge-download" disabled>Сохранить GPX</button>
+        </div>
+        <div class="result" id="merge-result" hidden></div>
+      </section>
+
+      <!-- PHOTO -->
+      <section class="panel" id="panel-photo" role="tabpanel" aria-labelledby="tab-photo" hidden>
+        <div class="panel-head">
+          <div>
+            <h2>Данные на фото</h2>
+            <p>Наложите показатели тренировки на фотографию и сохраните готовую карточку.</p>
+          </div>
+          <span class="badge">Трек + фото → PNG</span>
+        </div>
+
+        <div class="grid-two">
+          <label class="file-drop" id="drop-photo-track">
+            <input type="file" id="photo-track" accept=".gpx,.fit,application/gpx+xml,application/octet-stream">
+            <span class="file-icon">04</span>
+            <strong>Трек тренировки</strong>
+            <span class="file-name" id="photo-track-name">Файл не выбран</span>
+            <small>GPX или FIT с показателями</small>
+          </label>
+          <label class="file-drop" id="drop-photo-image">
+            <input type="file" id="photo-image" accept="image/*">
+            <span class="file-icon">05</span>
+            <strong>Фотография</strong>
+            <span class="file-name" id="photo-image-name">Файл не выбран</span>
+            <small>JPG, PNG или другой формат, который открывает браузер</small>
+          </label>
+        </div>
+
+        <fieldset class="metrics">
+          <legend>Данные на фото <small>Можно выбрать несколько показателей</small></legend>
+          <label class="check"><input type="checkbox" value="MOVING_TIME" checked><span>Время (без пауз)</span></label>
+          <label class="check"><input type="checkbox" value="DISTANCE" checked><span>Дистанция</span></label>
+          <label class="check"><input type="checkbox" value="AVERAGE_PACE"><span>Средний темп (мин/км)</span></label>
+          <label class="check"><input type="checkbox" value="AVERAGE_SPEED"><span>Средняя скорость (км/ч)</span></label>
+          <label class="check"><input type="checkbox" value="AVERAGE_HEART_RATE" checked><span>Средний пульс (уд/мин)</span></label>
+          <label class="check"><input type="checkbox" value="AVERAGE_POWER"><span>Средняя мощность (Вт)</span></label>
+          <label class="check"><input type="checkbox" value="TOTAL_ASCENT"><span>Общий подъём (м)</span></label>
+        </fieldset>
+
+        <div class="settings-row">
+          <label class="control">
+            <span>Значок тренировки</span>
+            <select id="photo-icon">
+              <option value="run">Бег</option>
+              <option value="bike">Вело</option>
+              <option value="text">Своё</option>
+            </select>
+          </label>
+          <label class="control" id="photo-custom-wrap" hidden>
+            <span>Своё</span>
+            <input type="text" id="photo-custom" maxlength="24" placeholder="Например, ТРЕНИРОВКА">
+          </label>
+          <label class="check">
+            <input type="checkbox" id="photo-logo" checked>
+            <span>Логотип Kuban Runners</span>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="photo-render">Собрать карточку</button>
+          <button type="button" class="btn btn-outline" id="photo-download" disabled>Сохранить PNG</button>
+        </div>
+        <div class="photo-preview" id="photo-preview" hidden>
+          <canvas id="photo-canvas"></canvas>
+        </div>
+      </section>
+    </section>
+
+    <section class="privacy" id="privacy">
+      <span class="privacy-icon">✓</span>
+      <div>
+        <strong>Ваши файлы остаются у вас</strong>
+        <p>Все вычисления выполняются в браузере. Интернет нужен только для загрузки самой страницы и переходов по ссылкам поддержки, телеграм-чата и канала обновлений.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>© TrackFix Web <span data-version></span></span>
+    <span class="footer-links">
+      <button type="button" class="link-button" data-open="about">О программе</button>
+      <a href="https://github.com/RomanLyavin/TrackFix" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/RomanLyavin/TrackFix/releases" target="_blank" rel="noopener">Релизы</a>
+    </span>
+  </footer>
+
+  <!-- SUPPORT -->
+  <dialog class="modal" id="support-dialog">
+    <form method="dialog" class="modal-head">
+      <h2>Поддержать проект</h2>
+      <button class="icon-button" value="close" aria-label="Закрыть">×</button>
+    </form>
+    <div class="modal-body">
+      <p>Спасибо за поддержку TrackFix!</p>
+      <a href="https://t.tb.ru/pm_short/AOdA22MAdsS" target="_blank" rel="noopener">
+        <img src="assets/donate.jpg" alt="Картинка для поддержки проекта">
+      </a>
+      <p class="hint">Нажмите на картинку, чтобы перейти к оплате.</p>
+    </div>
+  </dialog>
+
+  <!-- ABOUT -->
+  <dialog class="modal" id="about-dialog">
+    <form method="dialog" class="modal-head">
+      <h2>О программе</h2>
+      <button class="icon-button" value="close" aria-label="Закрыть">×</button>
+    </form>
+    <div class="modal-body about-body">
+      <p class="about-version">TrackFix Web <span data-version></span></p>
+      <div class="about-developer">
+        <img src="assets/kr_logo.jpg" alt="Логотип Kuban Runners">
+        <div>
+          <p>Разработчик: Лявин Роман</p>
+          <a href="https://t.me/+0oJbL1UtVVhkYzli" target="_blank" rel="noopener">TG чат лучшего бегового клуба KR</a>
+        </div>
+      </div>
+      <hr>
+      <div class="about-link-row">
+        <a href="https://t.me/trackFix" target="_blank" rel="noopener">
+          <strong>TG программы</strong>
+          <small>Свежие версии TrackFix в Telegram-канале</small>
+        </a>
+      </div>
+      <div class="about-link-row">
+        <a href="https://github.com/RomanLyavin/TrackFix/releases" target="_blank" rel="noopener">
+          <strong>Обновления</strong>
+          <small>Проверить обновление или открыть страницу на GitHub</small>
+        </a>
+      </div>
+      <p>При разработке использована ИИ-модель OpenCode.</p>
+      <p><a href="mailto:lyrv@t-inform.ru">Почта: lyrv@t-inform.ru</a></p>
+      <p class="hint">Все вычисления выполняются на устройстве. Интернет нужен только для перехода по ссылкам поддержки, телеграм-чата и канала обновлений.</p>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
