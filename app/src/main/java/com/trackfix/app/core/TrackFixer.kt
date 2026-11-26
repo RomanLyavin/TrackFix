@@ -15,6 +15,9 @@ private const val PHASE_WEIGHT = 0.1
 private const val FIRST_POINT_SEARCH_RADIUS_METERS = 600.0
 private const val DISTANCE_ALIGNMENT_CAP_METERS = 50.0
 private const val DISTANCE_ALIGNMENT_PHASE_STEPS = 200
+// A long, smooth run away from the reference is a real detour, not a glitch.
+// Only short shifted runs may be flattened onto the reference in normal mode.
+private const val MAX_REPAIRED_FAR_RUN_POINTS = 60
 
 data class FixSettings(
     val maxDeviationMeters: Double = 30.0,
@@ -236,19 +239,60 @@ class TrackFixer(
         }
 
         val far = BooleanArray(n) { valid[it] && deviation[it] > threshold }
-        val frozenRanges = detectFrozenRuns(input, valid, nearest)
+        val farRunSize = IntArray(n)
+        var farStart = 0
+        while (farStart < n) {
+            if (!far[farStart]) {
+                farStart++
+                continue
+            }
+            var farEnd = farStart
+            while (farEnd + 1 < n && far[farEnd + 1]) farEnd++
+            val size = farEnd - farStart + 1
+            for (index in farStart..farEnd) farRunSize[index] = size
+            farStart = farEnd + 1
+        }
+
+        val allFrozenRanges = detectFrozenRuns(input, valid, nearest)
+        // An interior frozen segment inside a long off-reference section is
+        // part of that detour. Only a frozen segment on the route, or a lost
+        // tail that has no later GPS fix, may be reconstructed.
+        val frozenRanges = allFrozenRanges.filter { range ->
+            range.last == n - 1 ||
+                (deviation[range.first].isFinite() && deviation[range.first] <= threshold * 1.5)
+        }
         val frozenFlag = BooleanArray(n)
         for (range in frozenRanges) {
             for (index in range) frozenFlag[index] = true
         }
         val bad = BooleanArray(n)
 
+        // A teleport produces a short shifted run. Keep repairing such runs as
+        // a whole; a much longer smooth run is a real detour and is left alone.
+        farStart = 0
+        while (farStart < n) {
+            if (!far[farStart]) {
+                farStart++
+                continue
+            }
+            var farEnd = farStart
+            while (farEnd + 1 < n && far[farEnd + 1]) farEnd++
+            if (farRunSize[farStart] <= MAX_REPAIRED_FAR_RUN_POINTS &&
+                (farStart..farEnd).any { suspicious[it] }
+            ) {
+                for (index in farStart..farEnd) bad[index] = true
+            }
+            farStart = farEnd + 1
+        }
+
         for (i in 0 until n) {
             if (missing[i]) bad[i] = true
             // A speed spike alone is normal GPS noise when the point still lies
-            // on the reference. Only repair it when the coordinate is also far
-            // away, otherwise clean tracks get nudged by a few metres.
-            if (suspicious[i] && far[i]) bad[i] = true
+            // on the reference. A long smooth run away from the reference is a
+            // real detour and must not be flattened because of one spike in it.
+            if (suspicious[i] && far[i] && farRunSize[i] <= MAX_REPAIRED_FAR_RUN_POINTS) {
+                bad[i] = true
+            }
         }
         // A point can lie a few centimetres from a parallel branch of a
         // self-overlapping reference while the travelled distance shows that
@@ -297,24 +341,7 @@ class TrackFixer(
         // route can be a real detour and must not be flattened onto the
         // reference. A track that simply continues beyond the end of the
         // reference must not be "corrected" either.
-        val farRunSize = IntArray(n)
         var i = 0
-        while (i < n) {
-            if (!far[i]) {
-                i++
-                continue
-            }
-            var j = i
-            while (j + 1 < n && far[j + 1]) j++
-
-            val size = j - i + 1
-            for (k in i..j) farRunSize[k] = size
-            val mark = (i..j).any { suspicious[it] }
-            if (mark) {
-                for (k in i..j) bad[k] = true
-            }
-            i = j + 1
-        }
 
         // If one point of a teleport is marked, the entire shifted run must be
         // replaced, otherwise a long broken line would remain in the file.
@@ -333,14 +360,14 @@ class TrackFixer(
                     // A missing block may absorb only a short far run (a
                     // teleport-like glitch). A long shifted run next to a
                     // missing prefix can be a real offset and must stay.
-                    if (far[neighbor] && (glitch || farRunSize[neighbor] <= 5)) {
+                    if (far[neighbor] && farRunSize[neighbor] <= MAX_REPAIRED_FAR_RUN_POINTS) {
                         bad[neighbor] = true
                         changed = true
                     }
                 }
                 if (index < n - 1 && !bad[index + 1]) {
                     val neighbor = index + 1
-                    if (far[neighbor] && (glitch || farRunSize[neighbor] <= 5)) {
+                    if (far[neighbor] && farRunSize[neighbor] <= MAX_REPAIRED_FAR_RUN_POINTS) {
                         bad[neighbor] = true
                         changed = true
                     }
@@ -1180,7 +1207,10 @@ class TrackFixer(
     ): Int? {
         var index = start
         var checked = 0
-        val limit = max(150.0, threshold * 4.0)
+        // A lost tail starts right after the last real GPS fix. That fix can
+        // itself be well off the reference when the rider took another route,
+        // but it is still the only reliable place to continue from.
+        val limit = max(300.0, threshold * 10.0)
         while (index in valid.indices && checked < 200) {
             if (valid[index] && deviation[index].isFinite() && deviation[index] <= limit) {
                 return index
@@ -1469,7 +1499,10 @@ class TrackFixer(
     ): Boolean {
         val edgeBlock = block.first == 0 || block.last == input.size - 1
         val searchRadius = if (edgeBlock) {
-            max(150.0, threshold * 4.0)
+            // The last real fix before a lost tail can be far from the
+            // reference when the rider followed another route. It is still
+            // needed as the anchor for reconstructing the tail.
+            max(300.0, threshold * 10.0)
         } else {
             max(100.0, threshold * 2.0)
         }

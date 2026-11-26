@@ -128,6 +128,10 @@ object MergeEngine {
         val namespace = root.namespaceURI
         val declaredNamespaces = LinkedHashMap<String, String>()
         collectNamespaceDeclarations(root, declaredNamespaces)
+        // The activity type belongs to the workout, not to a point. Keep the
+        // first (earliest) source's value; otherwise the merged file loses the
+        // <type> element that FIT sources carry and readers fall back to Run.
+        val trackType = firstTrackType(document, namespace)
 
         // Rebuild the document from scratch but keep the root and its
         // namespace declarations. This preserves prefixes used by extensions
@@ -145,6 +149,11 @@ object MergeEngine {
         val trackName = createElement(document, namespace, "name")
         trackName.textContent = baseName(baseMeta.item.name) + " (merged)"
         track.appendChild(trackName)
+        if (!trackType.isNullOrBlank()) {
+            val typeElement = createElement(document, namespace, "type")
+            typeElement.textContent = trackType
+            track.appendChild(typeElement)
+        }
         root.appendChild(track)
 
         var cutoff: Instant? = null
@@ -258,6 +267,19 @@ object MergeEngine {
             distanceMeters = totalDistance,
             segmentCount = segmentCount
         )
+    }
+
+    private fun firstTrackType(document: Document, namespace: String?): String? {
+        val nodes = if (namespace.isNullOrBlank()) {
+            document.getElementsByTagName("type")
+        } else {
+            document.getElementsByTagNameNS(namespace, "type")
+        }
+        for (index in 0 until nodes.length) {
+            val value = nodes.item(index).textContent?.trim()
+            if (!value.isNullOrBlank()) return value
+        }
+        return null
     }
 
     private fun createElement(document: Document, namespace: String?, name: String): Element {
